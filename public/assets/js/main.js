@@ -16,7 +16,7 @@ import {
   renderHome, renderLeaderboards, renderPlayer, renderPlayers,
   renderStaff, renderMedia, renderRules,
 } from './views.js';
-import { renderApply, renderReport, renderAppeal } from './forms.js';
+import { renderApply, renderReport, renderAppeal, renderLink } from './forms.js';
 import { renderDashboard } from './dash.js';
 
 // example.invalid is the same app behind the same session; the host only
@@ -71,6 +71,7 @@ function shell() {
         <a href="/apply">Apply</a>
         <a href="/report">Report</a>
         <a href="/appeal">Appeal</a>
+        <a href="/link">Link account</a>
         <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
       </div>
     </div>`;
@@ -282,6 +283,10 @@ async function route(path, params) {
     if (seg[0] === 'report') {
       setTitle('Report a player');
       return await renderReport(app);
+    }
+    if (seg[0] === 'link') {
+      setTitle('Link your account');
+      return await renderLink(app);
     }
     if (seg[0] === 'appeal') {
       setTitle('Appeal');

@@ -43,6 +43,10 @@ export const api = {
   applySubmit: (role, answers) => send(`/apply/${encodeURIComponent(role)}`, 'POST', { answers }),
   myApplications: () => get('/my/applications'),
 
+  linkStatus: () => get('/link'),
+  linkCode: () => send('/link/code', 'POST'),
+  unlink: () => send('/link', 'DELETE'),
+
   reportCategories: () => get('/report/categories'),
   report: (body) => send('/report', 'POST', body),
   appeal: (body) => send('/appeal', 'POST', body),

@@ -5,20 +5,35 @@ const router = express.Router();
 
 const config = require('../config');
 const staff = require('../lib/staff');
-const mongo = require('../lib/mongo');
+const links = require('../lib/links');
+const phoenix = require('../lib/phoenix');
+const { cached } = require('../lib/cache');
 
 // Who the browser is. The page uses this to decide between a login button and a
 // name, so it must answer for signed-out visitors too — 200 with `user: null`,
 // never a 401.
 
-// A linked Minecraft account. Nothing writes to this yet: linking needs an
-// in-game command to prove ownership, and that plugin does not exist. Returns
-// null until it does, which every caller already handles.
+// The Minecraft account this Discord one proved it owns, via /link in game.
+// Null until they do, which every caller already handles.
 async function linkedFor(discordId) {
   try {
-    return await (await mongo.site.links()).findOne({ discordId });
+    return await links.linkFor(discordId);
   } catch {
     return null;
+  }
+}
+
+// The ranks Phoenix has for a linked account. Discord roles decide what someone
+// may do (see lib/staff) because those are what the ticket bot grants; these are
+// the ranks they actually hold in game, which is a different question and worth
+// showing them.
+async function ranksFor(uuid) {
+  try {
+    const roster = await cached('roster', 60000, phoenix.roster);
+    const entry = roster.find((p) => p.uuid === uuid);
+    return entry ? entry.ranks.map((r) => ({ name: r.name, color: r.color, staff: r.staff })) : [];
+  } catch {
+    return [];
   }
 }
 
@@ -29,6 +44,7 @@ router.get('/me', async (req, res) => {
 
   const d = req.session.discord || {};
   const [ctx, link] = await Promise.all([staff.context(req), linkedFor(d.id)]);
+  const gameRanks = link ? await ranksFor(link.uuid) : [];
 
   res.json({
     loginConfigured: true,
@@ -40,7 +56,7 @@ router.get('/me', async (req, res) => {
           ? `https://cdn.discordapp.com/avatars/${d.id}/${d.avatar}.png?size=64`
           : null,
       },
-      minecraft: link ? { uuid: link.uuid, name: link.name } : null,
+      minecraft: link ? { uuid: link.uuid, name: link.name, ranks: gameRanks } : null,
       ranks: ctx.ranks,
       tier: ctx.tier,
       staff: ctx.tier > 0,
