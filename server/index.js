@@ -10,6 +10,15 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', true); // behind nginx + Cloudflare
 
+// --- Session --------------------------------------------------------------
+// Before the routes, so anything downstream can read req.session. Never throws:
+// a broken session store must not take the public pages down with it.
+const session = require('./lib/session');
+app.use(session.attach);
+
+// Discord's callback lands on a page, not on JSON, so these sit at the root.
+app.use(require('./routes/auth'));
+
 // --- API ------------------------------------------------------------------
 const api = express.Router();
 api.use(require('./routes/network'));
@@ -19,6 +28,8 @@ api.use(require('./routes/players'));
 api.use(require('./routes/skin'));
 api.use(require('./routes/team'));
 api.use(require('./routes/rules'));
+api.use(require('./routes/me'));
+api.use(require('./routes/apply'));
 app.use('/api', api);
 
 // --- Static frontend ------------------------------------------------------

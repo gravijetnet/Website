@@ -58,6 +58,25 @@ module.exports = {
       '/var/lib/featherpanel/volumes/ed4e2df8-b2dc-416f-841f-e13de4783e88/plugins/FastBuilder/maps',
   },
 
+  // Discord login. No defaults on purpose: the secret lives in
+  // /etc/gravijet-stats.env (root:www-data 0640), which systemd hands to the
+  // service via EnvironmentFile. If it is missing, `configured` is false and the
+  // login routes say so instead of half-working.
+  discord: {
+    clientId: process.env.DISCORD_CLIENT_ID || '',
+    clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+    redirectUri: process.env.DISCORD_REDIRECT_URI || 'https://example.invalid/auth/discord/callback',
+    get configured() {
+      return !!(this.clientId && this.clientSecret);
+    },
+  },
+
+  session: {
+    secret: process.env.SESSION_SECRET || '',
+    cookie: 'gj_s',
+    ttlMs: 30 * 24 * 60 * 60 * 1000,
+  },
+
   // How long API responses are cached in memory (ms).
   cacheTtl: parseInt(process.env.CACHE_TTL || '20000', 10),
 };
