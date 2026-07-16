@@ -14,9 +14,10 @@ export function playerCell(uuid, name, rank, online) {
     </div>`;
 }
 
-// A single telemetry stat (big mono number + caption). `cls` colours the value.
+// One line of the Statistics screen: label left, value right. `cls` colours the
+// value. Label first in the DOM as well as on screen — it's what you read first.
 export function stat(value, label, cls = '') {
-  return `<div class="stat"><div class="v ${cls}">${value}</div><div class="l">${esc(label)}</div></div>`;
+  return `<div class="stat"><span class="l">${esc(label)}</span><span class="v ${cls}">${value}</span></div>`;
 }
 
 // Win/loss split bar. wins/losses are raw counts. `label` names what the middle

@@ -52,9 +52,12 @@
   --label: #404040;      /* the colour of the word "Inventory" */
   --label-dim: #6b6b6b;
 
-  /* --- the entry surface: the server-list row --- */
-  --entry: rgba(0, 0, 0, 0.62);
-  --entry-hi: rgba(0, 0, 0, 0.78);
+  /* --- the entry surface: the server-list row ---
+     Opaque enough that the dirt stops competing with the text. At 0.62 every
+     letter had a noisy brown texture showing through it, which is most of why
+     the page read as hard to follow. */
+  --entry: rgba(0, 0, 0, 0.84);
+  --entry-hi: rgba(0, 0, 0, 0.93);
 
   /* --- the 16 chat colours (§0-§f) --- */
   --mc-dark-blue: #0000aa;
@@ -78,7 +81,12 @@
   --loss: var(--mc-red);
 
   --font: 'Monocraft', ui-monospace, monospace;
-  --container: 1180px;
+  /* A Minecraft screen is a narrow window centred on the dirt, never a
+     full-width dashboard. At 1180 the rows were mostly empty middle — a match
+     read "BedFight ... 600px of nothing ... LOSS" — which is what "poured in"
+     looks like. Pulling the column in costs no content and gives the dirt back
+     its job of framing the window. */
+  --container: 1000px;
   --gut: 16px;
 }
 
@@ -103,17 +111,20 @@ button { font: inherit; border: none; background: none; color: inherit; }
 a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--mc-white); outline-offset: 2px; }
 
 /* ----------------------------------------------------------------- cursors */
-/* Drawn on the same 2px grid as the bevels, so the pointer belongs to the same
-   picture as everything under it. These are ours, not lifted: the game has no
-   cursor asset at all — its GUI borrows the OS pointer. The hand is likewise a
-   web idea the game never needed, but a site that is almost entirely links
-   can't afford to drop that affordance. Every rule keeps the real keyword as a
-   fallback for browsers that reject the image. */
-body { cursor: url('/assets/img/cursor.png') 0 0, default; }
-a[href], button, .btn, summary, [role='button'] { cursor: url('/assets/img/cursor-pointer.png') 9 0, pointer; }
-input, textarea { cursor: url('/assets/img/cursor-text.png') 7 15, text; }
-/* Nothing to press, so nothing to promise. */
-.btn:disabled, .lb-tab.dead, [aria-disabled='true'] { cursor: url('/assets/img/cursor.png') 0 0, default; }
+/* The crosshair, everywhere — it's what you're looking at while you play, so
+   it's what the mouse is here. Nothing changes on hover: the game doesn't swap
+   pointers to tell you a thing is interactive, it lights the thing up, and this
+   design already does that (white outline on buttons, white edge on rows).
+   Minecraft draws the crosshair by inverting what's behind it, which CSS can't
+   do to a cursor; the black outline does that job the only way the web allows.
+   The keyword after each url() is the fallback if a browser rejects the image. */
+/* Links and buttons are named explicitly rather than left to inherit from body:
+   the browser's own sheet says a:link { cursor: pointer }, and an inherited
+   value loses to any rule that actually matches — including the browser's. */
+body, a[href], button, summary, [role='button'] { cursor: url('/assets/img/crosshair.png') 16 16, crosshair; }
+/* The one exception. A crosshair is for aiming at a thing; typing means aiming
+   between two letters, and that's what an I-beam is for. */
+input, textarea { cursor: url('/assets/img/cursor-text.png') 16 16, text; }
 
 /* -------------------------------------------------------------- scrollbar */
 /* The game does have this widget, so it's lifted rather than invented: a black
@@ -172,8 +183,8 @@ h1, h2, h3, h4 { font-weight: 700; }
 
 /* ------------------------------------------------------------------ layout */
 .container { width: 100%; max-width: var(--container); margin: 0 auto; padding: 0 var(--gut); }
-.section { padding: 28px 0; }
-.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.section { padding: 46px 0; }
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .section-head h2 { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .section-head p { color: var(--mc-gray); font-size: 16px; max-width: 44ch; text-shadow: 2px 2px 0 #2a2a2a; }
 
@@ -290,19 +301,24 @@ h1, h2, h3, h4 { font-weight: 700; }
 .telemetry .cell .v { font-size: 24px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .telemetry .cell .l { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 4px; }
 
-/* -------------------------------------------------------------- mode cards */
-.mode-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-.mode-card { padding: 14px; display: flex; flex-direction: column; min-height: 196px; position: relative; }
-.mode-card .glyph { width: 32px; height: 32px; color: var(--mc-aqua); margin-bottom: 10px; }
-.mode-card .glyph svg { width: 32px; height: 32px; }
-.mode-card h3 { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
-.mode-card .tag { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 5px; line-height: 1.3; }
-.mode-card .m-foot { margin-top: auto; padding-top: 12px; display: flex; flex-direction: column; gap: 7px; }
-.mode-card .m-foot .mv { font-size: 16px; font-weight: 700; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
-.mode-card .m-foot .ml { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
-.mode-card.enter:hover h3 { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
-.mode-card.soon { opacity: 0.6; }
-.mode-card .badge-soon { position: absolute; top: 12px; right: 12px; }
+/* --------------------------------------------------------- mode list */
+/* The multiplayer server list, which is what this actually is: pick a mode and
+   go. Icon, name and blurb left; the numbers right, on their own column so they
+   line up down the list instead of drifting with the text beside them. */
+.mode-list { display: flex; flex-direction: column; gap: 4px; }
+.mode-row { display: flex; align-items: center; gap: 16px; padding: 14px 16px; }
+.mode-row .glyph { width: 32px; height: 32px; color: var(--mc-aqua); flex-shrink: 0; }
+.mode-row .glyph svg { width: 32px; height: 32px; }
+.mode-row .m-id { flex: 1; min-width: 0; }
+.mode-row .m-id h3 { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.mode-row .tag { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 3px; }
+.mode-row .m-foot { display: flex; gap: 12px; flex-shrink: 0; }
+.mode-row .m-foot > div { min-width: 116px; text-align: right; }
+.mode-row .m-foot .mv { font-size: 16px; font-weight: 700; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+.mode-row .m-foot .ml { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 3px; }
+.mode-row .m-badge { width: 44px; text-align: right; flex-shrink: 0; }
+.mode-row.enter:hover h3 { color: var(--btn-fg-hi); text-shadow: 2px 2px 0 #3f3f28; }
+.mode-row.soon { opacity: 0.6; }
 
 .badge { display: inline-block; font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
 .badge.soon { color: var(--mc-light-purple); text-shadow: 2px 2px 0 #3f153f; }
@@ -375,27 +391,35 @@ h1, h2, h3, h4 { font-weight: 700; }
 .sum-tile .l { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 4px; }
 
 /* Each mode is a container window with a title bar. */
-.panel { margin-top: 16px; }
+.panel { margin-top: 12px; }
 .panel-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 2px solid var(--outline); background: rgba(0, 0, 0, 0.4); }
 .panel-head .glyph { width: 24px; height: 24px; color: var(--mc-aqua); }
 .panel-head .glyph svg { width: 24px; height: 24px; }
 .panel-head h3 { font-size: 24px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .panel-head .ph-sub { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 3px; }
 .panel-head .ph-right { margin-left: auto; }
-.panel-body { padding: 10px; }
+.panel-body { padding: 16px 18px 18px; }
 
-/* Fixed 5 columns, not auto-fit: Bedwars has exactly 10 stats and auto-fit
-   packed 9 into one row and orphaned the tenth. Five also leaves each label
-   room to sit on one line. */
-.stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-.stat { padding: 10px 8px; background: rgba(0, 0, 0, 0.32); }
-.stat .v { font-size: 24px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+/* The Statistics screen is a LIST — label left, value right, one per line — and
+   tiles were the mistake. A fixed grid of backgrounded tiles can't help leaving
+   holes: Duels' 9 values orphaned a tenth cell, FFA's 4 left a gap, and an empty
+   cell with a background on it reads as a bug rather than as nothing. A list has
+   no cells to leave empty. Three columns keeps each label near its own number;
+   at two the value drifts half a panel away from what it's naming. */
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 28px; }
+.stat {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 7px 2px; border-bottom: 2px solid rgba(255, 255, 255, 0.07);
+}
+.stat .l { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+/* Hierarchy here is weight and colour, not size — the game's own list does the
+   same, and a pixel font can't be scaled between 16 and 24 without going mushy. */
+.stat .v { font-size: 16px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; white-space: nowrap; }
 .stat .v.win { color: var(--mc-green); text-shadow: 2px 2px 0 #153f15; }
 .stat .v.loss { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
-.stat .l { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 3px; }
 
-.block { padding: 10px 0 0; }
-.block-label { font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; margin-bottom: 8px; }
+.block { padding: 20px 0 0; }
+.block-label { font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; margin-bottom: 10px; }
 
 /* The win/loss bar is the XP bar: a sunken trough with a hard fill. */
 .wl-bar { height: 16px; display: flex; background: var(--mc-dark-red); box-shadow: inset 2px 2px 0 rgba(0,0,0,0.55); }
@@ -403,12 +427,18 @@ h1, h2, h3, h4 { font-weight: 700; }
 .wl-legend { display: flex; justify-content: space-between; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-top: 6px; }
 
 /* kits */
-.kit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 4px; }
+/* 220, not 172: at 172 the cards came out 188px wide and "FireballFight" plus
+   its elo needs 181px of the 168px inside one, so the longest kit names ellipsed
+   away — and a truncated kit name is not a kit name. */
+.kit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px; }
 .kit-card { padding: 10px; background: rgba(0, 0, 0, 0.32); }
 .kit-card:hover { background: rgba(0, 0, 0, 0.5); }
 .kit-card .kc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.kit-card .kc-name { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
-.kit-card .kc-elo { font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+/* "FireballFight" plus its elo overran the card and collided with the next one
+   ("FireballFight 1.00NoDebuff"). A flex item won't shrink below its content
+   unless it's told it may. */
+.kit-card .kc-name { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kit-card .kc-elo { font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; flex-shrink: 0; }
 .kit-card .kc-stats { display: flex; gap: 10px; margin-top: 8px; }
 .kit-card .kc-stats .ks { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
 .kit-card .kc-stats .ks b { color: var(--mc-white); font-weight: 400; text-shadow: 2px 2px 0 #3f3f3f; }
@@ -470,12 +500,11 @@ h1, h2, h3, h4 { font-weight: 700; }
 .notice a:hover { color: var(--mc-yellow); }
 
 /* -------------------------------------------------------------- responsive */
-@media (max-width: 1080px) { .mode-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 900px) {
   .hero-grid { grid-template-columns: 1fr; }
   .telemetry { grid-template-columns: repeat(2, 1fr); }
   .p-summary { grid-template-columns: repeat(2, 1fr); }
-  .stat-row { grid-template-columns: repeat(3, 1fr); }
+  .stat-row { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 620px) {
   .nav-links { display: none; }
@@ -487,9 +516,24 @@ h1, h2, h3, h4 { font-weight: 700; }
   .nav-inner { gap: 10px; }
   .search-input { width: 100%; min-width: 0; }
   .search { flex: 1; min-width: 0; }
-  .mode-grid, .telemetry, .p-summary { grid-template-columns: 1fr; }
-  .stat-row { grid-template-columns: repeat(2, 1fr); }
-  .board-head { display: none; }
+  .telemetry, .p-summary { grid-template-columns: 1fr; }
+  /* The row can't hold four things side by side this narrow: the numbers go
+     under the name, and the blurb goes — the name and its stats are the point. */
+  .mode-row { flex-wrap: wrap; gap: 8px 12px; }
+  .mode-row .m-id { flex: 1 0 60%; }
+  .mode-row .tag { display: none; }
+  .mode-row .m-foot > div { min-width: 0; text-align: left; }
+  .mode-row .m-foot { gap: 20px; flex: 1 0 100%; }
+  .stat-row { grid-template-columns: 1fr; }
+  /* Four numbers and a name don't fit in 390px — the name lost, and came out as
+     "Tops...", which is the one column nobody can afford to lose. So below this
+     width a board keeps the rank, the player, and the single metric it's sorted
+     by; the rest are a tap away on the profile. Each board sets its own columns
+     inline (they differ per mode), hence the !important — there's no stylesheet
+     selector that can outrank a style attribute. */
+  .board-row, .board-head { grid-template-columns: 32px 1fr 72px !important; }
+  .board-row .val.sec { display: none; }
+  .board-head span.r ~ span.r { display: none; }
   .profile-hero { grid-template-columns: 1fr; }
   .hero-copy h1, .notice h2 { font-size: 32px; }
 }

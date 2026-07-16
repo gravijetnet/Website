@@ -36,36 +36,46 @@ export function makeNoise(ac) {
 // The voice, built into whichever context it's handed. Kept free of the module's
 // own context so an OfflineAudioContext can render and measure the real thing —
 // nobody here can hear it, and a copy of this code in a test would prove nothing.
+//
+// Two struck resonators, no oscillator. The first version swept a triangle from
+// 880Hz to 240Hz, which is why it read as a synth blip: a pitch glide is a
+// melodic gesture and the game's click has no melody in it. What it has is wood
+// — a hard transient plus a short resonance — and the way you get wood is to hit
+// a filter with noise and let it ring, not to play a note.
 export function voice(ac, out, noiseBuf, t, pitch = 1, gain = 0.5) {
-  const n = ac.createBufferSource();
-  n.buffer = noiseBuf;
-  const bp = ac.createBiquadFilter();
-  bp.type = 'bandpass';
-  bp.frequency.value = 1700 * pitch;
-  bp.Q.value = 0.9;
-  const ng = ac.createGain();
-  ng.gain.setValueAtTime(gain * 0.5, t);
-  ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
-  n.connect(bp).connect(ng).connect(out);
-  n.start(t);
-  n.stop(t + 0.05);
-
-  const o = ac.createOscillator();
-  o.type = 'triangle';
-  o.frequency.setValueAtTime(880 * pitch, t);
-  o.frequency.exponentialRampToValueAtTime(240 * pitch, t + 0.04);
+  // One lowpass across the whole voice. A bandpass only slopes away from its
+  // centre, it doesn't wall anything off, so enough of the noise's top end
+  // survives to turn the click into a hiss — measured at 41% of the energy above
+  // 6kHz before this existed. Wood has no sizzle.
   const lp = ac.createBiquadFilter();
   lp.type = 'lowpass';
-  lp.frequency.value = 3200;
-  const og = ac.createGain();
-  // Ramp up over 4ms rather than starting at full: a hard start adds its own
-  // click on top of ours, and two clicks read as a crackle.
-  og.gain.setValueAtTime(0.0001, t);
-  og.gain.exponentialRampToValueAtTime(gain, t + 0.004);
-  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-  o.connect(lp).connect(og).connect(out);
-  o.start(t);
-  o.stop(t + 0.06);
+  lp.frequency.value = 4800 * pitch;
+  lp.Q.value = 0.7;
+  lp.connect(out);
+
+  // A narrow bandpass throws away most of white noise's energy, so `level` runs
+  // well above 1 to pay that back — these aren't mix levels, they're what's left
+  // after the filter.
+  const strike = (freq, q, decay, level) => {
+    const n = ac.createBufferSource();
+    n.buffer = noiseBuf;
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = freq * pitch;
+    bp.Q.value = q;
+    const g = ac.createGain();
+    // Ramp up over 2ms rather than starting at full: a hard start adds its own
+    // click on top of ours, and two clicks read as a crackle.
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain * level, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    n.connect(bp).connect(g).connect(lp);
+    n.start(t);
+    n.stop(t + decay + 0.01);
+  };
+
+  strike(2400, 1.2, 0.014, 2.7); // the tick — the part you hear as "click"
+  strike(560, 4.5, 0.055, 8.5);  // the body — rings just long enough to be wood
 }
 
 // Built on the first tick, which is always inside a user gesture — browsers

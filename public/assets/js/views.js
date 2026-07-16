@@ -54,32 +54,28 @@ export async function renderHome(root) {
   const n = net.network;
   const liveModes = net.modes.filter((m) => m.status === 'active').length;
 
-  const modeCard = (m) => {
+  // A server-list row, not a card: icon, name and blurb on the left, numbers on
+  // the right. As cards these were 180px wide and FastBuilder's blurb wrapped to
+  // five lines while Duels' sat on one — five ragged columns of mostly nothing.
+  const modeRow = (m) => {
     const glyph = `<div class="glyph">${icons[m.key] || icons.bolt}</div>`;
-    const foot = m.headline.length
-      ? `<div class="m-foot">${m.headline
-          .map((h) => `<div><div class="mv">${compact(h.value)}</div><div class="ml">${esc(h.label)}</div></div>`)
-          .join('')}</div>`
-      : '';
-    if (m.status === 'soon') {
-      return `
-        <div class="mode-card soon entry">
-          <div class="badge-soon"><span class="badge soon">Soon</span></div>
-          ${glyph}
-          <h3>${esc(m.name)}</h3>
-          <div class="tag">${esc(m.tag)}</div>
-          <div class="m-foot"><div><div class="mv">--</div><div class="ml">Not live yet</div></div></div>
-        </div>`;
-    }
-    const badge = m.live ? '<div class="badge-soon"><span class="badge live">Live</span></div>' : '';
-    return `
-      <a class="mode-card enter entry" href="/leaderboards/${m.key}">
-        ${badge}
-        ${glyph}
+    const cell = (v, l) => `<div><div class="mv">${v}</div><div class="ml">${esc(l)}</div></div>`;
+    const soon = m.status === 'soon';
+    const foot = `<div class="m-foot">${
+      soon ? cell('--', 'Not live yet') : m.headline.map((h) => cell(compact(h.value), h.label)).join('')
+    }</div>`;
+    const id = `
+      ${glyph}
+      <div class="m-id">
         <h3>${esc(m.name)}</h3>
         <div class="tag">${esc(m.tag)}</div>
-        ${foot}
-      </a>`;
+      </div>
+      ${foot}
+      <div class="m-badge">${soon ? '<span class="badge soon">Soon</span>' : m.live ? '<span class="badge live">Live</span>' : ''}</div>`;
+
+    return soon
+      ? `<div class="mode-row soon entry">${id}</div>`
+      : `<a class="mode-row enter entry" href="/leaderboards/${m.key}">${id}</a>`;
   };
 
   root.innerHTML = `
@@ -144,7 +140,7 @@ export async function renderHome(root) {
           </div>
           <p>Every mode writes to its own ledger. Pick one and climb, or spread yourself thin — the network keeps score either way.</p>
         </div>
-        <div class="mode-grid">${net.modes.map(modeCard).join('')}</div>
+        <div class="mode-list">${net.modes.map(modeRow).join('')}</div>
       </div>
     </section>
 
@@ -540,10 +536,7 @@ function practicePanel(pr) {
       )}
       <div class="panel-body">
         <div class="stat-row">
-          <div class="stat">
-            <div class="v" style="color:${pr.division.color};font-size:15px">${esc(pr.division.label)}</div>
-            <div class="l">Division</div>
-          </div>
+          ${stat(`<span style="color:${pr.division.color}">${esc(pr.division.label)}</span>`, 'Division')}
           ${stat(int(pr.globalElo), 'Global elo')}
           ${stat(int(pr.wins), 'Wins', 'win')}
           ${stat(int(pr.losses), 'Losses', 'loss')}
