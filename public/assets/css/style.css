@@ -24,6 +24,11 @@
      - The type scale is quantised to the font's pixel grid (8/16/24/32/48).
        A pixel font at 17px is mush: the game scales in whole pixels, so do we.
      - image-rendering: pixelated. Nothing is ever smoothed.
+     - The chrome belongs to the picture too: the pointer and the scrollbar are
+       drawn on the same 2px grid, so nothing on screen is stock browser.
+
+   Sound follows the same principle one floor down — see sound.js. The game runs
+   its whole interface on one click and repitches it; so do we.
    ========================================================================== */
 
 :root {
@@ -34,9 +39,16 @@
   --slot: #8b8b8b;
   --slot-hi: #ffffff;
   --slot-lo: #373737;
-  --btn: #6c6c6c;
-  --btn-hi: #7f7f88;
   --outline: #000000;
+
+  /* --- the button, and the three text colours the game gives it --- */
+  --btn: #6c6c6c;
+  --btn-hover: #7b7b88;  /* the hovered texture: lighter, faintly blue */
+  --btn-off: #4c4c4c;
+  --btn-fg: #ffffff;
+  --btn-fg-hi: #ffffa0;  /* Button.getFGColor() while hovered — NOT chat yellow */
+  --btn-fg-off: #a0a0a0; /* ...and while disabled */
+
   --label: #404040;      /* the colour of the word "Inventory" */
   --label-dim: #6b6b6b;
 
@@ -86,9 +98,37 @@ body {
 }
 img { display: block; max-width: 100%; image-rendering: pixelated; }
 a { color: inherit; text-decoration: none; }
-button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+button { font: inherit; border: none; background: none; color: inherit; }
 ::selection { background: var(--mc-green); color: #000; }
 a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--mc-white); outline-offset: 2px; }
+
+/* ----------------------------------------------------------------- cursors */
+/* Drawn on the same 2px grid as the bevels, so the pointer belongs to the same
+   picture as everything under it. These are ours, not lifted: the game has no
+   cursor asset at all — its GUI borrows the OS pointer. The hand is likewise a
+   web idea the game never needed, but a site that is almost entirely links
+   can't afford to drop that affordance. Every rule keeps the real keyword as a
+   fallback for browsers that reject the image. */
+body { cursor: url('/assets/img/cursor.png') 0 0, default; }
+a[href], button, .btn, summary, [role='button'] { cursor: url('/assets/img/cursor-pointer.png') 9 0, pointer; }
+input, textarea { cursor: url('/assets/img/cursor-text.png') 7 15, text; }
+/* Nothing to press, so nothing to promise. */
+.btn:disabled, .lb-tab.dead, [aria-disabled='true'] { cursor: url('/assets/img/cursor.png') 0 0, default; }
+
+/* -------------------------------------------------------------- scrollbar */
+/* The game does have this widget, so it's lifted rather than invented: a black
+   trough and a raised grey thumb — a #8b8b8b body lit #c6c6c6 from the top-left.
+   Same grammar as .raised, so it belongs to the buttons. Chromium needs the
+   pseudo-elements; Firefox only takes the two colours and draws its own shape,
+   which is why the bevel is stated twice and can't be shared. */
+html { scrollbar-color: #8b8b8b #000; }  /* inherits to every inner scroller */
+::-webkit-scrollbar { width: 14px; height: 14px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: #000; }
+::-webkit-scrollbar-thumb {
+  background: #8b8b8b;
+  box-shadow: inset 2px 2px 0 #c6c6c6, inset -2px -2px 0 #555555;
+}
+::-webkit-scrollbar-thumb:hover { background: #9b9b9b; }
 
 /* ------------------------------------------------- the three core widgets */
 /* ENTRY — the server-list row. Where all text and data live. */
@@ -143,7 +183,9 @@ h1, h2, h3, h4 { font-weight: 700; }
 /* The in-game HUD strip. */
 .nav { position: sticky; top: 0; z-index: 50; background: rgba(0, 0, 0, 0.82); border-bottom: 2px solid var(--outline); }
 .nav-inner { display: flex; align-items: center; gap: 16px; height: 56px; }
-.brand { display: flex; align-items: center; gap: 8px; }
+/* Never shrink: the nav is a flex row, and letting the brand give way clips it
+   to "GRAVIJE". The search field is the one that should yield. */
+.brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .brand img { width: 32px; height: 32px; image-rendering: auto; } /* the logo isn't pixel art */
 .brand .word { font-size: 16px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .brand .word i { font-style: normal; color: var(--mc-aqua); }
@@ -183,18 +225,38 @@ h1, h2, h3, h4 { font-weight: 700; }
 .search-row .rk { font-size: 16px; margin-left: auto; }
 
 /* ----------------------------------------------------------------- buttons */
-/* The game's button: raised widget, white shadowed text, yellow on hover. */
+/* The game's button as the texture actually is: a 2px black outline, a light
+   top-left bevel, a body that darkens toward the bottom, a dark bottom-right.
+   What makes it unmistakably Minecraft's is the pair of states the game spends
+   its own code on — Button.getFGColor() returns 0xffffa0 while hovered and
+   0xa0a0a0 while disabled — together with the white outline its hovered texture
+   carries. Chat yellow (#ffff55) is a different colour doing a different job;
+   it marks selection here, and only hover gets #ffffa0. */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-size: 16px; padding: 9px 16px; min-height: 40px;
-  background: var(--btn); border: 2px solid var(--outline);
-  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.4), inset -2px -2px 0 rgba(0, 0, 0, 0.45);
-  color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f;
+  border: 2px solid var(--outline);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 48%, rgba(0, 0, 0, 0.16) 100%) var(--btn);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.42), inset -2px -2px 0 rgba(0, 0, 0, 0.45);
+  color: var(--btn-fg); text-shadow: 2px 2px 0 #3f3f3f;
 }
-.btn:hover { background: var(--btn-hi); color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
-.btn:active { box-shadow: inset -2px -2px 0 rgba(255, 255, 255, 0.28), inset 2px 2px 0 rgba(0, 0, 0, 0.45); }
-.btn-primary { background: #3c8527; } /* the green "Play" button */
-.btn-primary:hover { background: #4a9c30; }
+.btn:hover {
+  background-color: var(--btn-hover);
+  border-color: var(--mc-white);
+  color: var(--btn-fg-hi); text-shadow: 2px 2px 0 #3f3f28;
+}
+/* Pressed: the bevel flips, so the lit edge moves to the bottom-right and the
+   body's gradient turns over with it. */
+.btn:active {
+  box-shadow: inset -2px -2px 0 rgba(255, 255, 255, 0.30), inset 2px 2px 0 rgba(0, 0, 0, 0.50);
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.16) 0%, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, 0.08) 100%);
+}
+.btn-primary { background-color: #3c8527; } /* the green "Play" button */
+.btn-primary:hover { background-color: #4a9c30; }
+
+/* A small square GUI button — currently just the sound toggle. */
+.icon-btn { width: 32px; height: 32px; min-height: 32px; padding: 0; flex-shrink: 0; }
+.icon-btn svg { width: 16px; height: 16px; display: block; fill: currentColor; }
 
 /* -------------------------------------------------------------------- hero */
 .hero { padding: 32px 0 24px; }
@@ -249,8 +311,16 @@ h1, h2, h3, h4 { font-weight: 700; }
 /* ------------------------------------------------------------- leaderboard */
 .lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
 .lb-tab { font-size: 16px; padding: 8px 12px; min-height: 36px; display: inline-flex; align-items: center; }
-.lb-tab.dead { opacity: 0.45; cursor: default; }
-.lb-tab.dead:hover { background: var(--btn); color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+/* Disabled the way the game disables: not faded out, but a flatter, darker
+   widget with grey text. Opacity would have dimmed the outline too, and the
+   outline is what tells you it's still a button. */
+.btn:disabled, .lb-tab.dead, .lb-tab.dead:hover {
+  background-color: var(--btn-off);
+  background-image: none;
+  border-color: var(--outline);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.14), inset -2px -2px 0 rgba(0, 0, 0, 0.3);
+  color: var(--btn-fg-off); text-shadow: 2px 2px 0 #282828;
+}
 /* selected = pressed in, like a toggled game option */
 .lb-tab.active, .metric-chip.active {
   background: var(--mc-dark-gray);
@@ -416,7 +486,7 @@ h1, h2, h3, h4 { font-weight: 700; }
   .brand .word i, .brand .word em { display: none; }
   .nav-inner { gap: 10px; }
   .search-input { width: 100%; min-width: 0; }
-  .search { flex: 1; }
+  .search { flex: 1; min-width: 0; }
   .mode-grid, .telemetry, .p-summary { grid-template-columns: 1fr; }
   .stat-row { grid-template-columns: repeat(2, 1fr); }
   .board-head { display: none; }

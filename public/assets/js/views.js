@@ -3,6 +3,7 @@
 import { api } from './api.js';
 import { icons } from './icons.js';
 import { playerCell, stat, wlBar, loader, pageLoader, notice } from './components.js';
+import { sound } from './sound.js';
 import {
   esc, int, compact, dec, playtime, secs, ms, timeAgo, dateShort,
   head, bodyImg, countUp,
@@ -298,6 +299,7 @@ export async function renderLeaderboards(root, mode, params) {
   try {
     data = await api.leaderboard(mode, { metric, kit, limit: 100 });
   } catch {
+    sound.deny();
     body.innerHTML = `<div class="board"><div class="empty">This ladder is unavailable right now.</div></div>`;
     return;
   }
@@ -393,6 +395,7 @@ export async function renderPlayer(root, name) {
   try {
     p = await api.player(name);
   } catch (err) {
+    sound.deny();
     root.innerHTML =
       err.status === 404
         ? notice('No such player', `Nobody named "${name}" has ever joined Gravijet. Check the spelling and try again.`)
@@ -638,6 +641,7 @@ export async function renderPlayers(root) {
   try {
     list = await api.players();
   } catch {
+    sound.deny();
     root.innerHTML = notice('Directory unavailable', 'The player registry could not be loaded. Try again in a moment.');
     return;
   }
