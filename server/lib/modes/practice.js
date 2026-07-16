@@ -4,7 +4,7 @@ const mongo = require('../mongo');
 const colors = require('../colors');
 
 // ---------------------------------------------------------------------------
-// Practice / Duels (Bolt, MongoDB)
+// Practice (Bolt, MongoDB)
 //
 // bolt-statistics    : one doc per player — global stats + per-kit stat blocks
 // bolt-player-profiles: settings, parkour PB, ordered match-history ids

@@ -3,7 +3,12 @@ import { api } from './api.js';
 
 // Same reason as sound.js: follow the versioned directory this module came from.
 const LOGO = new URL('../img/logo.webp', import.meta.url).href;
-import { icons } from './icons.js';
+
+// The vanity code `gravijet` is not registered — discord.gg/gravijet answers
+// "Unknown Invite", so the footer link was dead. This is the invite the old
+// landing page redirected to, and it resolves to "example.invalid - Minecraft
+// server". Swap it back if the vanity URL is ever bought.
+const DISCORD = 'https://discord.gg/xyrNc8AAH6';
 import { navigate, startRouter } from './nav.js';
 import { sound } from './sound.js';
 import { esc, head } from './util.js';
@@ -18,7 +23,7 @@ function shell() {
     <div class="container nav-inner">
       <a class="brand" href="/">
         <img src="${LOGO}" alt="" onerror="this.style.display='none'">
-        <span class="word">GRAVIJET<i>//</i><em>STATS</em></span>
+        <span class="word">GRAVIJET <em>STATS</em></span>
       </a>
       <nav class="nav-links">
         <a href="/" data-match="/">Home</a>
@@ -27,7 +32,6 @@ function shell() {
       </nav>
       <div class="nav-right">
         <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">--</span></div>
-        <button class="btn icon-btn" id="snd" aria-pressed="${sound.on}" aria-label="Interface sound" title="Interface sound"></button>
         <div class="search">
           <input class="search-input" id="q" type="text" placeholder="find player" autocomplete="off" spellcheck="false" aria-label="Find a player">
           <div class="search-results" id="qr"></div>
@@ -40,14 +44,14 @@ function shell() {
       <div>
         <div class="brand">
           <img src="${LOGO}" alt="" onerror="this.style.display='none'">
-          <span class="word">GRAVIJET<i>//</i><em>STATS</em></span>
+          <span class="word">GRAVIJET <em>STATS</em></span>
         </div>
-        <div class="f-copy">example.invalid &nbsp;//&nbsp; statistics</div>
+        <div class="f-copy">example.invalid</div>
       </div>
       <div class="f-links">
         <a href="/leaderboards">Leaderboards</a>
         <a href="/players">Players</a>
-        <a href="https://discord.gg/gravijet" data-ext target="_blank" rel="noopener">Discord</a>
+        <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
       </div>
     </div>`;
 }
@@ -63,26 +67,7 @@ function markActive(path) {
 // The game plays its click when you push a button down, not when you let go, so
 // this hooks pointerdown — waiting for the release reads as lag.
 
-function paintSndBtn() {
-  const b = document.getElementById('snd');
-  if (!b) return;
-  // `|| ''` rather than trusting the import: when a stale icons.js was cached
-  // beside a fresh main.js, this wrote the string "undefined" into the button
-  // and shipped it. The cache headers are fixed, but a missing icon should
-  // degrade to an empty button, never to text.
-  b.innerHTML = (sound.on ? icons.soundOn : icons.soundOff) || '';
-  b.setAttribute('aria-pressed', String(sound.on));
-}
-
 function wireSound() {
-  paintSndBtn();
-  document.getElementById('snd').addEventListener('click', () => {
-    // Turning it off, the press itself still sounds — you pressed while it was
-    // on. Turning it on, toggle() speaks. Either way you hear exactly one click.
-    sound.toggle();
-    paintSndBtn();
-  });
-
   // One sound for everything, like the game. The dead "Clutches (soon)" tab is a
   // <span>, so it never matches and never sounds — which is the point.
   document.addEventListener('pointerdown', (e) => {
@@ -130,7 +115,7 @@ function wireSearch() {
       .map(
         (p, i) => `
         <a class="search-row ${i === sel ? 'sel' : ''}" href="/player/${encodeURIComponent(p.name)}">
-          <img src="${head(p.uuid, 52)}" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/52'">
+          <img src="${head(p.uuid, 52)}" alt="" onerror="this.onerror=null;this.src='${head(null, 52)}'">
           <span class="nm">${esc(p.name)}</span>
           <span class="rk" style="color:${p.rank.color}">${esc(p.rank.label)}</span>
         </a>`,

@@ -26,7 +26,7 @@ const METRICS = {
     ],
   },
   practice: {
-    label: 'Duels',
+    label: 'Practice',
     metrics: [
       { key: 'elo', label: 'Global ELO' },
       { key: 'wins', label: 'Wins' },

@@ -6,7 +6,7 @@ export function playerCell(uuid, name, rank, online) {
   const dot = online ? '<span class="online-dot" title="Online"></span>' : '';
   return `
     <div class="player-cell">
-      <img src="${head(uuid, 68)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/68'">
+      <img src="${head(uuid, 68)}" loading="lazy" alt="" onerror="this.onerror=null;this.src='${head(null, 68)}'">
       <div style="min-width:0">
         <div class="pc-name">${esc(name)}${dot ? ' ' + dot : ''}</div>
         <div class="pc-rank" style="color:${rank?.color || '#8b91ac'}">${esc(rank?.label || 'Member')}</div>

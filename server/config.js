@@ -38,6 +38,16 @@ module.exports = {
     timeoutMs: 1500,
   },
 
+  // FastBuilder's map list lives in the plugin's maps/ folder, not in the
+  // database: player_map_stats only learns a map's name once somebody has timed
+  // a run on it, so the selector would be empty for a map nobody has played yet.
+  // Read-only, and the catalog falls back to the database if this is unreadable.
+  fastbuilder: {
+    mapsDir:
+      process.env.FASTBUILDER_MAPS_DIR ||
+      '/var/lib/featherpanel/volumes/ed4e2df8-b2dc-416f-841f-e13de4783e88/plugins/FastBuilder/maps',
+  },
+
   // How long API responses are cached in memory (ms).
   cacheTtl: parseInt(process.env.CACHE_TTL || '20000', 10),
 };

@@ -1,6 +1,9 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const sql = require('../sql');
+const config = require('../../config');
 
 // ---------------------------------------------------------------------------
 // FastBuilder (MariaDB, `fastbuilder` schema)
@@ -57,8 +60,13 @@ const METRICS = {
 // Fastest bridge run — the mode's real ladder. Without a map filter this is each
 // player's single best time anywhere, so one row per player rather than one row
 // per player-map.
+// Matched case-insensitively: the selector's key is the map's filename
+// (`plains`), and there is no guarantee the plugin stores map_name in that same
+// case rather than the display name (`Plains`).
 async function timeLeaderboard(limit = 100, mapName = null) {
-  const where = mapName ? 'WHERE best_time > 0 AND map_name = :map' : 'WHERE best_time > 0';
+  const where = mapName
+    ? 'WHERE best_time > 0 AND LOWER(map_name) = LOWER(:map)'
+    : 'WHERE best_time > 0';
   const rows = await sql.safeQuery(
     'fastbuilder',
     `SELECT s.uuid,
@@ -95,14 +103,54 @@ async function leaderboard(metric = 'best_time', limit = 100, mapName = null) {
   return rows.map(shapeData).filter((p) => p.experience > 0 || p.coins > 0);
 }
 
-// The maps players have actually timed, for the map selector.
+// The plugin keeps one YAML file per map. Only two top-level scalars matter here
+// — `name` and `enabled` — so this reads them directly rather than adding a YAML
+// parser for two keys.
+function mapsFromDisk() {
+  const dir = config.fastbuilder && config.fastbuilder.mapsDir;
+  if (!dir) return [];
+  let files;
+  try {
+    files = fs.readdirSync(dir).filter((f) => f.endsWith('.yml'));
+  } catch {
+    return []; // not readable from here — the database still answers
+  }
+  const out = [];
+  for (const file of files) {
+    try {
+      const text = fs.readFileSync(path.join(dir, file), 'utf8');
+      if (/^enabled:\s*false\s*$/m.test(text)) continue;
+      const key = path.basename(file, '.yml');
+      const named = text.match(/^name:\s*(.+?)\s*$/m);
+      out.push({ key, label: named ? named[1].replace(/^["']|["']$/g, '') : key });
+    } catch {
+      /* one unreadable map file shouldn't empty the selector */
+    }
+  }
+  return out;
+}
+
+// Every map you can pick, whether or not anyone has timed a run on it yet.
+// Definitions come from disk so a brand-new map is selectable immediately; the
+// database supplies the run counts, and any map with times but no definition
+// (renamed, retired, or owned by another server) is kept rather than hidden.
 async function mapCatalog() {
   const rows = await sql.safeQuery(
     'fastbuilder',
     `SELECT map_name, COUNT(*) AS runs FROM player_map_stats
        WHERE best_time > 0 GROUP BY map_name ORDER BY runs DESC, map_name ASC`,
   );
-  return rows.map((r) => ({ key: r.map_name, label: r.map_name, games: Number(r.runs) || 0 }));
+  const runs = new Map(rows.map((r) => [String(r.map_name).toLowerCase(), Number(r.runs) || 0]));
+
+  const catalog = new Map();
+  for (const m of mapsFromDisk()) {
+    catalog.set(m.key.toLowerCase(), { key: m.key, label: m.label, games: runs.get(m.key.toLowerCase()) || 0 });
+  }
+  for (const r of rows) {
+    const k = String(r.map_name).toLowerCase();
+    if (!catalog.has(k)) catalog.set(k, { key: r.map_name, label: r.map_name, games: Number(r.runs) || 0 });
+  }
+  return [...catalog.values()].sort((a, b) => b.games - a.games || a.label.localeCompare(b.label));
 }
 
 module.exports = { forUuid, loadAll, leaderboard, timeLeaderboard, mapCatalog, METRICS };

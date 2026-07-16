@@ -70,16 +70,22 @@ export function dateShort(iso) {
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// --- skins (rendered client-side from third-party services) ----------------
+// --- skins -----------------------------------------------------------------
+// Served from our own origin: the renderers are still third-party, but /api/skin
+// caches their answers and Cloudflare caches ours. See server/routes/skin.js.
+export const STEVE = 'MHF_Steve';
+
 export function head(uuid, size = 64) {
-  return `https://mc-heads.net/avatar/${uuid || 'MHF_Steve'}/${size}`;
+  return `/api/skin/head/${encodeURIComponent(uuid || STEVE)}.png?s=${size}`;
 }
-// 3D body via StarlightSkins, falling back to a flat mc-heads body on error.
+
+// The server falls back between renderers itself, so `fallback` is only for the
+// case where every one of them is down.
 export function bodyImg(uuid) {
-  const u = uuid || 'MHF_Steve';
+  const u = uuid || STEVE;
   return {
-    src: `https://starlightskins.lunareclipse.studio/render/walking/${u}/full`,
-    fallback: `https://mc-heads.net/body/${u}/300`,
+    src: `/api/skin/body/${encodeURIComponent(u)}.png`,
+    fallback: `/api/skin/body/${STEVE}.png`,
   };
 }
 

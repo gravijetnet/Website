@@ -223,8 +223,7 @@ h1, h2, h3, h4 { font-weight: 700; }
 .brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .brand img { width: 32px; height: 32px; image-rendering: auto; } /* the logo isn't pixel art */
 .brand .word { font-size: 16px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
-.brand .word i { font-style: normal; color: var(--mc-aqua); }
-.brand .word em { font-style: normal; }
+.brand .word em { font-style: normal; color: var(--mc-aqua); }
 .brand .word { white-space: nowrap; }
 .nav-links { display: flex; gap: 4px; margin-left: 8px; }
 .nav-links a { font-size: 16px; color: var(--mc-gray); padding: 4px 8px; text-shadow: 2px 2px 0 #2a2a2a; }
@@ -290,9 +289,6 @@ h1, h2, h3, h4 { font-weight: 700; }
 .btn-primary:hover { background-color: #4a9c30; }
 
 /* A small square GUI button — currently just the sound toggle. */
-.icon-btn { width: 32px; height: 32px; min-height: 32px; padding: 0; flex-shrink: 0; }
-.icon-btn svg { width: 16px; height: 16px; display: block; fill: currentColor; }
-
 /* -------------------------------------------------------------------- hero */
 .hero { padding: 32px 0 24px; }
 .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; align-items: start; }
@@ -366,6 +362,21 @@ h1, h2, h3, h4 { font-weight: 700; }
 }
 .lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 #lb-filters:not(:empty) { margin-top: 12px; padding-top: 12px; border-top: 2px solid rgba(255, 255, 255, 0.1); }
+
+/* Ranking-by and filtering-to are two different questions, so each gets its own
+   labelled row. As one flat run of identical chips they read as a single
+   choice, and picking a kit looked like picking a stat. */
+.lb-row { display: flex; align-items: flex-start; gap: 12px; }
+.lb-row + .lb-row { margin-top: 10px; padding-top: 10px; border-top: 2px solid rgba(255, 255, 255, 0.08); }
+.lb-row-label {
+  flex: 0 0 auto;
+  width: 40px;
+  padding-top: 6px;
+  font-size: 16px;
+  color: var(--mc-dark-gray);
+  text-shadow: 2px 2px 0 #1a1a1a;
+}
+.lb-row .chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .lb-tab { font-size: 16px; padding: 9px 16px; min-height: 40px; display: inline-flex; align-items: center; }
 /* Disabled the way the game disables: not faded out, but a flatter, darker
    widget with grey text. Opacity would have dimmed the outline too, and the
@@ -383,8 +394,6 @@ h1, h2, h3, h4 { font-weight: 700; }
   box-shadow: inset -2px -2px 0 rgba(255, 255, 255, 0.28), inset 2px 2px 0 rgba(0, 0, 0, 0.5);
   color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15;
 }
-.chips, .kit-select { display: flex; gap: 5px; flex-wrap: wrap; }
-
 /* The secondary rank: sunken, not raised. Deliberately quieter than a button. */
 .metric-chip {
   font-size: 16px; padding: 5px 10px; min-height: 30px;
@@ -397,7 +406,6 @@ h1, h2, h3, h4 { font-weight: 700; }
   background: var(--mc-dark-gray); border-color: var(--mc-white);
   color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15;
 }
-.kit-select { margin-top: 6px; }
 
 /* The board: a list of server-list entries. */
 .board { display: flex; flex-direction: column; gap: 4px; }
@@ -454,7 +462,7 @@ h1, h2, h3, h4 { font-weight: 700; }
 
 /* The Statistics screen is a LIST — label left, value right, one per line — and
    tiles were the mistake. A fixed grid of backgrounded tiles can't help leaving
-   holes: Duels' 9 values orphaned a tenth cell, FFA's 4 left a gap, and an empty
+   holes: Practice's 9 values orphaned a tenth cell, FFA's 4 left a gap, and an empty
    cell with a background on it reads as a bug rather than as nothing. A list has
    no cells to leave empty. Three columns keeps each label near its own number;
    at two the value drifts half a panel away from what it's naming. */
@@ -565,8 +573,8 @@ h1, h2, h3, h4 { font-weight: 700; }
   /* brand + live count + search will not fit on one line at 390px; the count
      is already on the home page, so the nav keeps brand and search. */
   .live-pill { display: none; }
-  /* "GRAVIJET//STATS" wraps at this width; the suffix is the part to lose. */
-  .brand .word i, .brand .word em { display: none; }
+  /* "GRAVIJET STATS" wraps at this width; the suffix is the part to lose. */
+  .brand .word em { display: none; }
   .nav-inner { gap: 10px; }
   .search-input { width: 100%; min-width: 0; }
   .search { flex: 1; min-width: 0; }

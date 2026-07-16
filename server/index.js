@@ -16,6 +16,7 @@ api.use(require('./routes/network'));
 api.use(require('./routes/leaderboards'));
 api.use(require('./routes/player'));
 api.use(require('./routes/players'));
+api.use(require('./routes/skin'));
 app.use('/api', api);
 
 // --- Static frontend ------------------------------------------------------

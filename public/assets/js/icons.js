@@ -18,20 +18,8 @@ export const icons = {
   sword: wrap('<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6M16 16l4 4M19 21l2-2"/>'),
   shield: wrap('<path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Z"/>'),
   flame: wrap('<path d="M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-1.2.5-2.3 1.3-3.2C9 10 10 8 12 3Z"/>'),
+  staff: wrap('<path d="M12 3 5 6v5c0 4 3 7 7 9 4-2 7-5 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>'),
+  media: wrap('<path d="M4 6h11v12H4z"/><path d="m15 12 5-3v9l-5-3z"/>'),
+  rules: wrap('<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/>'),
+  report: wrap('<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/>'),
 };
-
-// The sound toggle's two states. Pixel rects on a 16-unit grid rather than the
-// stroke geometry above: this one renders at 16px inside a GUI button, and a
-// 1.6px stroke at that size is mush.
-const px = (p) => `<svg viewBox="0 0 16 16" shape-rendering="crispEdges">${p}</svg>`;
-const rect = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}"/>`;
-const SPEAKER = rect(2, 6, 2, 4) + rect(4, 5, 1, 6) + rect(5, 4, 1, 8) + rect(6, 3, 2, 10);
-
-icons.soundOn = px(SPEAKER + rect(10, 6, 1, 4) + rect(12, 4, 1, 8));
-icons.soundOff = px(
-  SPEAKER +
-    // an X where the waves were
-    [[9, 6], [10, 7], [11, 8], [12, 9], [13, 10], [13, 6], [12, 7], [10, 9], [9, 10]]
-      .map(([x, y]) => rect(x, y, 1, 1))
-      .join(''),
-);

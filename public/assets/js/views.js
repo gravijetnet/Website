@@ -11,7 +11,7 @@ import {
 // ---------------------------------------------------------------- shared bits
 
 const MODE_ORDER = ['bedwars', 'practice', 'ffa', 'fastbuilder'];
-const MODE_LABEL = { bedwars: 'Bedwars', practice: 'Duels', ffa: 'FFA', fastbuilder: 'FastBuilder' };
+const MODE_LABEL = { bedwars: 'Bedwars', practice: 'Practice', ffa: 'FFA', fastbuilder: 'FastBuilder' };
 
 // Numbers in the readout are zero-padded — it's a machine display.
 function pad(n, w = 2) {
@@ -39,6 +39,11 @@ function titleCase(s) {
   return String(s || '').replace(/^[a-z]/, (c) => c.toUpperCase());
 }
 
+// One labelled row of chips inside the leaderboard control band.
+function filterRow(label, chips) {
+  return `<div class="lb-row"><span class="lb-row-label">${esc(label)}</span><div class="chips">${chips}</div></div>`;
+}
+
 // =============================================================== home =======
 
 export async function renderHome(root) {
@@ -55,7 +60,7 @@ export async function renderHome(root) {
 
   // A server-list row, not a card: icon, name and blurb on the left, numbers on
   // the right. As cards these were 180px wide and FastBuilder's blurb wrapped to
-  // five lines while Duels' sat on one — five ragged columns of mostly nothing.
+  // five lines while Practice's sat on one — five ragged columns of mostly nothing.
   const modeRow = (m) => {
     const glyph = `<div class="glyph">${icons[m.key] || icons.bolt}</div>`;
     const cell = (v, l) => `<div><div class="mv">${v}</div><div class="ml">${esc(l)}</div></div>`;
@@ -173,7 +178,7 @@ function spotlightSection(spot) {
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Duels &mdash; most wins</span>
+            <span class="eyebrow">Practice &mdash; most wins</span>
             <h2>Ladder spotlight</h2>
           </div>
           <a class="btn" href="/leaderboards/practice">Full ladder</a>
@@ -193,7 +198,7 @@ function onlineSection(list) {
     .map(
       (p) => `
       <a class="dir-card entry" href="/player/${encodeURIComponent(p.name)}">
-        <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/60'">
+        <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.onerror=null;this.src='${head(null, 60)}'">
         <div style="min-width:0">
           <div class="dn">${esc(p.name)} <span class="online-dot"></span></div>
           <div class="dr" style="color:${p.rank.color}">${esc(p.rank.label)}</div>
@@ -260,10 +265,11 @@ const COLS = {
   },
 };
 
-// Which sub-filter a mode offers, and what to call it.
+// Which sub-filter a mode offers, and what to call it. `label` names the row,
+// `all` is the chip that clears it.
 const SUBFILTER = {
-  practice: { label: 'All kits', param: 'kit' },
-  fastbuilder: { label: 'All maps', param: 'kit' },
+  practice: { label: 'Kit', all: 'All kits', param: 'kit' },
+  fastbuilder: { label: 'Map', all: 'All maps', param: 'kit' },
 };
 
 export async function renderLeaderboards(root, mode, params) {
@@ -279,7 +285,6 @@ export async function renderLeaderboards(root, mode, params) {
             <span class="eyebrow" id="lb-crumb">${esc(MODE_LABEL[mode])}</span>
             <h2>Leaderboards</h2>
           </div>
-          <p>Ranked from live server data. Any row opens that player's full profile.</p>
         </div>
         <div class="lb-controls">
           <div class="lb-tabs">
@@ -317,7 +322,10 @@ export async function renderLeaderboards(root, mode, params) {
     crumb.textContent = `${MODE_LABEL[mode]} \u2014 ${mLabel}${kLabel ? ' \u2014 ' + kLabel.label : ''}`;
   }
 
-  const chips = data.metrics
+  // Two questions, so two rows: what you rank by, and which kit/map you're
+  // looking at. These used to be one undifferentiated run of identical chips,
+  // which read as a single choice — picking a kit looked like picking a stat.
+  const statChips = data.metrics
     .map((m) => {
       // In kit mode only the metrics that exist per-kit make sense.
       if (kitMode && m.key === 'level') return '';
@@ -328,9 +336,8 @@ export async function renderLeaderboards(root, mode, params) {
     })
     .join('');
 
-  // Sub-filter: practice kits, or FastBuilder maps on the time ladder.
-  let kitBar = '';
   const sub = SUBFILTER[mode];
+  let subRow = '';
   if (sub && data.kits.length) {
     const link = (k) => {
       const q = new URLSearchParams();
@@ -338,16 +345,17 @@ export async function renderLeaderboards(root, mode, params) {
       if (k) q.set(sub.param, k.key);
       return `/leaderboards/${mode}?${q}`;
     };
-    kitBar = `
-      <div class="kit-select">
-        <a class="metric-chip ${!data.kit ? 'active' : ''}" href="${link(null)}">${esc(sub.label)}</a>
-        ${data.kits.map((k) => `<a class="metric-chip ${data.kit === k.key ? 'active' : ''}" href="${link(k)}">${esc(k.label)}</a>`).join('')}
-      </div>`;
+    const subChips =
+      `<a class="metric-chip ${!data.kit ? 'active' : ''}" href="${link(null)}">${esc(sub.all)}</a>` +
+      data.kits
+        .map((k) => `<a class="metric-chip ${data.kit === k.key ? 'active' : ''}" href="${link(k)}">${esc(k.label)}</a>`)
+        .join('');
+    subRow = filterRow(sub.label, subChips);
   }
 
   // Filters belong to the controls band above, not on top of the table.
   const filters = root.querySelector('#lb-filters');
-  if (filters) filters.innerHTML = `${chips ? `<div class="chips">${chips}</div>` : ''}${kitBar}`;
+  if (filters) filters.innerHTML = (statChips ? filterRow('Stat', statChips) : '') + subRow;
 
   if (!data.entries.length) {
     body.innerHTML = '<div class="board"><div class="empty">No ranked players in this category yet — be the first.</div></div>';
@@ -474,9 +482,9 @@ function bedwarsPanel(b) {
 }
 
 function practicePanel(pr) {
-  if (!pr) return emptyPanel('practice', 'Duels', 'Practice', 'No duels played yet.');
+  if (!pr) return emptyPanel('practice', 'Practice', 'Ranked duels', 'No duels played yet.');
   if (!pr.games && !pr.kills) {
-    return emptyPanel('practice', 'Duels', `${esc(pr.division.label)} · ${int(pr.globalElo)} elo`, 'No duels played yet.');
+    return emptyPanel('practice', 'Practice', `${esc(pr.division.label)} · ${int(pr.globalElo)} elo`, 'No duels played yet.');
   }
 
   const kits = pr.kits.filter((k) => k.games > 0);
@@ -528,7 +536,7 @@ function practicePanel(pr) {
     <section class="panel entry">
       ${panelHead(
         'practice',
-        'Duels',
+        'Practice',
         `${int(pr.games)} matches · level ${int(pr.level)}`,
         // No Minecraft colour here on purpose: the panel header is inverted, and
         // pale division colours (Silver = #AAAAAA) vanish against it. The label
@@ -643,7 +651,7 @@ export async function renderPlayers(root) {
     .map(
       (p) => `
       <a class="dir-card entry" href="/player/${encodeURIComponent(p.name)}">
-        <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/60'">
+        <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.onerror=null;this.src='${head(null, 60)}'">
         <div style="min-width:0">
           <div class="dn">${esc(p.name)}${p.online ? ' <span class="online-dot"></span>' : ''}</div>
           <div class="dr" style="color:${p.rank.color}">${esc(p.rank.label)}</div>

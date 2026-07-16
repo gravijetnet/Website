@@ -7,28 +7,32 @@ const sql = require('../lib/sql');
 const mongoLib = require('../lib/mongo');
 const { cached } = require('../lib/cache');
 const colors = require('../lib/colors');
+const playersLib = require('../lib/players');
 const bedwars = require('../lib/modes/bedwars');
 const practice = require('../lib/modes/practice');
 const ffa = require('../lib/modes/ffa');
 const fastbuilder = require('../lib/modes/fastbuilder');
 
-function num(rows, field = 'c') {
-  return rows.length ? Number(rows[0][field]) || 0 : 0;
-}
-
 async function buildOverview() {
-  // Network-wide counters + live registry state.
-  const [statRows, onlineRows, regRows] = await Promise.all([
+  // Network-wide counters + live registry state. The registry is read whole and
+  // collapsed by name rather than counted in SQL: `players` holds one row per
+  // login, so a player with both a premium and an offline account was counted
+  // twice and could appear twice in the online list.
+  const [statRows, regRows] = await Promise.all([
     sql.safeQuery('phoenix', 'SELECT * FROM network_stats WHERE id = 1'),
-    sql.safeQuery('phoenix', "SELECT uuid, name, rank FROM players WHERE online = 1 ORDER BY playtime DESC"),
-    sql.safeQuery('phoenix', 'SELECT COUNT(*) AS c FROM players'),
+    sql.safeQuery('phoenix', 'SELECT * FROM players'),
   ]);
   const net = statRows[0] || {};
+  const registry = playersLib.dedupeByName(regRows);
+  const registered = registry.length;
 
-  const onlinePlayers = onlineRows.map((r) => {
-    const rk = colors.parse(r.rank || '');
-    return { uuid: r.uuid, name: r.name, rank: { label: rk.label || 'Member', color: rk.color } };
-  });
+  const onlinePlayers = registry
+    .filter((r) => r.online)
+    .sort((a, b) => (Number(b.playtime) || 0) - (Number(a.playtime) || 0))
+    .map((r) => {
+      const rk = colors.parse(r.rank || '');
+      return { uuid: r.uuid, name: r.name, rank: { label: rk.label || 'Member', color: rk.color } };
+    });
 
   // Per-mode data (each guarded so a dead source can't break the page).
   const [bw, pr, fa, fb, bwLive] = await Promise.all([
@@ -58,7 +62,7 @@ async function buildOverview() {
     },
     {
       key: 'practice',
-      name: 'Duels',
+      name: 'Practice',
       tag: '20 ranked kits',
       status: 'active',
       players: pr.filter((p) => p.games > 0).length,
@@ -101,14 +105,16 @@ async function buildOverview() {
 
   return {
     network: {
-      totalPlayers: Number(net.total_players) || num(regRows),
+      // The deduped registry, not network_stats.total_players: the headline
+      // count has to agree with the directory it sends you to.
+      totalPlayers: registered,
       totalBans: Number(net.total_bans) || 0,
       totalMutes: Number(net.total_mutes) || 0,
       totalKicks: Number(net.total_kicks) || 0,
       peakOnline: Number(net.peak_online) || 0,
       currentOnline: onlinePlayers.length,
     },
-    registered: num(regRows),
+    registered,
     online: onlinePlayers.length,
     onlinePlayers,
     modes,
