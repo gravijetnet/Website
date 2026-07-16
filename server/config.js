@@ -69,12 +69,42 @@ module.exports = {
     get configured() {
       return !!(this.clientId && this.clientSecret);
     },
+
+    // Who is staff is decided by Discord roles, not by a list I invented. These
+    // ids are the ones the ticket bot already uses (its config.json), so a
+    // promotion in Discord is a promotion here — there is one place to change.
+    //
+    // Not secrets: a role id is useless without being in the guild and holding
+    // the role. They live here rather than in the env file so the mapping is
+    // reviewable.
+    guildId: process.env.DISCORD_GUILD_ID || '000000000000000000',
+    staffRole: '000000000000000000',
+    managementRole: '000000000000000000',
+    rankRoles: {
+      Creator: '000000000000000000',
+      Media: '000000000000000000',
+      Famous: '000000000000000000',
+      Partner: '000000000000000000',
+      Builder: '000000000000000000',
+      Helper: '000000000000000000',
+      Mod: '000000000000000000',
+      SrMod: '000000000000000000',
+      Developer: '000000000000000000',
+      Admin: '000000000000000000',
+      'Beta-Tester': '000000000000000000',
+    },
   },
 
   session: {
     secret: process.env.SESSION_SECRET || '',
     cookie: 'gj_s',
-    ttlMs: 30 * 24 * 60 * 60 * 1000,
+    // Shared with example.invalid so one login covers the dashboard.
+    // Unset on localhost, where a Domain would stop the cookie working at all.
+    domain: process.env.SESSION_COOKIE_DOMAIN || '',
+    // Seven days, matching the lifetime of the Discord token we refresh roles
+    // with. A session outliving its token is a session whose permissions have
+    // quietly frozen.
+    ttlMs: 7 * 24 * 60 * 60 * 1000,
   },
 
   // How long API responses are cached in memory (ms).

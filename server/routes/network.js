@@ -8,6 +8,7 @@ const mongoLib = require('../lib/mongo');
 const { cached } = require('../lib/cache');
 const colors = require('../lib/colors');
 const playersLib = require('../lib/players');
+const hidden = require('../lib/hidden');
 const bedwars = require('../lib/modes/bedwars');
 const practice = require('../lib/modes/practice');
 const ffa = require('../lib/modes/ffa');
@@ -23,7 +24,8 @@ async function buildOverview() {
     sql.safeQuery('phoenix', 'SELECT * FROM players'),
   ]);
   const net = statRows[0] || {};
-  const registry = playersLib.dedupeByName(regRows);
+  const hiddenSet = await hidden.uuids();
+  const registry = playersLib.dedupeByName(regRows).filter((r) => !hiddenSet.has(r.uuid));
   const registered = registry.length;
 
   const onlinePlayers = registry

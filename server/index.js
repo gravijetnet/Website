@@ -30,6 +30,9 @@ api.use(require('./routes/team'));
 api.use(require('./routes/rules'));
 api.use(require('./routes/me'));
 api.use(require('./routes/apply'));
+api.use(require('./routes/report'));
+api.use(require('./routes/appeal'));
+api.use(require('./routes/dashboard'));
 app.use('/api', api);
 
 // --- Static frontend ------------------------------------------------------

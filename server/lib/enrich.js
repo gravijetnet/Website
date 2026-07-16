@@ -1,6 +1,7 @@
 'use strict';
 
 const players = require('./players');
+const hidden = require('./hidden');
 
 // Attach registry identity (rank colour, online state, canonical name) to a
 // list of mode stat rows keyed by `uuid`. Rows keep their own `name` as a
@@ -11,11 +12,15 @@ const players = require('./players');
 // keeps its better placing and loses the other. Ranks are numbered after that,
 // so the board never shows a name twice and never skips a number doing it.
 async function withIdentity(rows) {
-  const map = await players.identityMap(rows.map((r) => r.uuid));
+  const [map, hiddenSet] = await Promise.all([
+    players.identityMap(rows.map((r) => r.uuid)),
+    hidden.uuids(),
+  ]);
 
   const seen = new Set();
   const out = [];
   for (const row of rows) {
+    if (hiddenSet.has(row.uuid)) continue;
     const id = map.get(row.uuid);
     const name = id?.name || row.name || 'Unknown';
     const key = name.toLowerCase();

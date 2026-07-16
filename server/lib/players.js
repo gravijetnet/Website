@@ -2,6 +2,7 @@
 
 const sql = require('./sql');
 const colors = require('./colors');
+const hidden = require('./hidden');
 
 // The phoenixbridge `players` table is the master registry: it maps name <-> uuid
 // and holds rank, playtime, online state and first/last seen for everyone who has
@@ -118,9 +119,15 @@ async function identityMap(uuids) {
 }
 
 // Everyone in the registry — used for the players directory and search.
+//
+// Hidden players are dropped here but NOT in byName/byUuid: a moderator has to
+// be able to look one up to take the hide back off, and a lookup that pretends
+// they never existed makes that impossible.
 async function all() {
   const rows = await sql.safeQuery('phoenix', 'SELECT * FROM players');
+  const hiddenSet = await hidden.uuids();
   return dedupeByName(rows)
+    .filter((r) => !hiddenSet.has(r.uuid))
     .map(shapeIdentity)
     .sort((a, b) => b.playtime - a.playtime);
 }

@@ -20,4 +20,11 @@ function bust(prefix) {
   for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
 }
 
-module.exports = { cached, bust };
+// Drop everything. Used when a staff action changes what the lists should show —
+// hiding a player that stays visible for another 20 seconds reads as a button
+// that did not work, and gets pressed again.
+function invalidate() {
+  store.clear();
+}
+
+module.exports = { cached, bust, invalidate };

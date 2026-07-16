@@ -4,20 +4,19 @@ const express = require('express');
 const router = express.Router();
 
 const config = require('../config');
-const phoenix = require('../lib/phoenix');
-const { cached } = require('../lib/cache');
+const staff = require('../lib/staff');
 const mongo = require('../lib/mongo');
 
-// Who the browser is. Also what the page uses to decide whether to show a login
-// button or a name, so it must answer for signed-out visitors too — 200 with
-// `user: null`, not a 401.
+// Who the browser is. The page uses this to decide between a login button and a
+// name, so it must answer for signed-out visitors too — 200 with `user: null`,
+// never a 401.
 
-// A linked Minecraft account is what turns a Discord identity into someone with
-// ranks. Until /link exists there is nothing to look up, so this returns null
-// and every caller already handles that.
+// A linked Minecraft account. Nothing writes to this yet: linking needs an
+// in-game command to prove ownership, and that plugin does not exist. Returns
+// null until it does, which every caller already handles.
 async function linkedFor(discordId) {
   try {
-    return await (await mongo.site.links()).findOne({ _id: discordId });
+    return await (await mongo.site.links()).findOne({ discordId });
   } catch {
     return null;
   }
@@ -27,17 +26,9 @@ router.get('/me', async (req, res) => {
   if (!req.session) {
     return res.json({ user: null, loginConfigured: config.discord.configured });
   }
-  const d = req.session.discord || {};
-  const link = await linkedFor(d.id);
 
-  let ranks = [];
-  let staff = false;
-  if (link) {
-    const roster = await cached('roster', 60000, phoenix.roster);
-    const entry = roster.find((p) => p.uuid === link.uuid);
-    ranks = entry ? entry.ranks.map((r) => ({ name: r.name, color: r.color, staff: r.staff })) : [];
-    staff = ranks.some((r) => r.staff);
-  }
+  const d = req.session.discord || {};
+  const [ctx, link] = await Promise.all([staff.context(req), linkedFor(d.id)]);
 
   res.json({
     loginConfigured: true,
@@ -45,11 +36,15 @@ router.get('/me', async (req, res) => {
       discord: {
         id: d.id,
         name: d.globalName || d.username,
-        avatar: d.avatar ? `https://cdn.discordapp.com/avatars/${d.id}/${d.avatar}.png?size=64` : null,
+        avatar: d.avatar
+          ? `https://cdn.discordapp.com/avatars/${d.id}/${d.avatar}.png?size=64`
+          : null,
       },
       minecraft: link ? { uuid: link.uuid, name: link.name } : null,
-      ranks,
-      staff,
+      ranks: ctx.ranks,
+      tier: ctx.tier,
+      staff: ctx.tier > 0,
+      can: ctx.abilities,
     },
   });
 });

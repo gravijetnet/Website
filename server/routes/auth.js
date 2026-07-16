@@ -6,6 +6,7 @@ const router = express.Router();
 
 const config = require('../config');
 const session = require('../lib/session');
+const staff = require('../lib/staff');
 
 // Discord login. Mounted at the site root rather than under /api, because the
 // browser is redirected here by Discord and these are pages in a flow, not JSON.
@@ -38,7 +39,10 @@ router.get('/auth/discord', (req, res) => {
     client_id: config.discord.clientId,
     redirect_uri: config.discord.redirectUri,
     response_type: 'code',
-    scope: 'identify',
+    // guilds.members.read is what lets us read their roles in the Gravijet
+    // guild, which is how the dashboard decides what they may do. It grants no
+    // access to messages and none to any other server.
+    scope: 'identify guilds.members.read',
     state,
     prompt: 'none',
   });
@@ -78,9 +82,12 @@ router.get('/auth/discord/callback', async (req, res) => {
     if (!meRes.ok) throw new Error(`me ${meRes.status}`);
     const me = await meRes.json();
 
-    // The access token is not kept: `identify` is all we asked for, and once we
-    // know who they are there is nothing left to spend it on. Storing it would
-    // only be a thing to leak.
+    const roles = await staff.fetchRoles(token.access_token);
+
+    // The token is kept — server-side in the session, never in the cookie —
+    // because roles have to be re-read as they change. Someone demoted at noon
+    // must not still hold the dashboard at midnight, and that means asking
+    // Discord again rather than trusting what login once said.
     await session.create(res, {
       discord: {
         id: me.id,
@@ -88,6 +95,9 @@ router.get('/auth/discord/callback', async (req, res) => {
         globalName: me.global_name || null,
         avatar: me.avatar || null,
       },
+      accessToken: token.access_token,
+      roles,
+      rolesAt: Date.now(),
     });
     res.redirect(back);
   } catch (err) {

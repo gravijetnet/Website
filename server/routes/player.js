@@ -5,6 +5,8 @@ const router = express.Router();
 
 const { cached } = require('../lib/cache');
 const players = require('../lib/players');
+const hidden = require('../lib/hidden');
+const staff = require('../lib/staff');
 const bedwars = require('../lib/modes/bedwars');
 const practice = require('../lib/modes/practice');
 const ffa = require('../lib/modes/ffa');
@@ -48,6 +50,17 @@ router.get('/player/:name', async (req, res) => {
   try {
     const profile = await cached(`player:${name.toLowerCase()}`, 15000, () => buildProfile(name));
     if (!profile) return res.status(404).json({ error: 'player_not_found', name });
+
+    // Hiding a player has to cover the direct link too, or it only hides them
+    // from people who weren't looking. Staff still see it: they are the ones who
+    // have to judge whether the hide was right.
+    if (await hidden.isHidden(profile.identity.uuid)) {
+      const ctx = await staff.context(req);
+      if (!staff.can(ctx.tier, 'hidePlayers')) {
+        return res.status(404).json({ error: 'player_not_found', name });
+      }
+      profile.hidden = true;
+    }
     res.json(profile);
   } catch (err) {
     console.error('[player]', err);

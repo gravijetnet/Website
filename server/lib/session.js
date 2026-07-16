@@ -45,6 +45,7 @@ function setCookie(res, name, value, maxAgeMs) {
     'Secure',
     'SameSite=Lax',
   ];
+  if (config.session.domain) bits.push(`Domain=${config.session.domain}`);
   if (maxAgeMs === 0) bits.push('Max-Age=0');
   else if (maxAgeMs) bits.push(`Max-Age=${Math.floor(maxAgeMs / 1000)}`);
   const prev = res.getHeader('Set-Cookie');

@@ -16,6 +16,13 @@ import {
   renderHome, renderLeaderboards, renderPlayer, renderPlayers,
   renderStaff, renderMedia, renderRules,
 } from './views.js';
+import { renderApply, renderReport, renderAppeal } from './forms.js';
+import { renderDashboard } from './dash.js';
+
+// example.invalid is the same app behind the same session; the host only
+// decides which front door you came through. Everything under /dashboard checks
+// the rank server-side regardless of where it is asked from.
+const IS_DASH_HOST = location.hostname.startsWith('spielplatz.');
 
 const app = document.getElementById('app');
 
@@ -38,6 +45,7 @@ function shell() {
       </nav>
       <div class="nav-right">
         <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">--</span></div>
+        <div id="who"></div>
         <div class="search">
           <input class="search-input" id="q" type="text" placeholder="find player" autocomplete="off" spellcheck="false" aria-label="Find a player">
           <div class="search-results" id="qr"></div>
@@ -60,6 +68,9 @@ function shell() {
         <a href="/staff">Staff</a>
         <a href="/media">Media</a>
         <a href="/rules">Rules</a>
+        <a href="/apply">Apply</a>
+        <a href="/report">Report</a>
+        <a href="/appeal">Appeal</a>
         <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
       </div>
     </div>`;
@@ -89,6 +100,42 @@ function wireSound() {
     const el = document.activeElement;
     if (el && el.matches && el.matches('a[href], button') && !el.disabled) sound.click();
   });
+}
+
+// ------------------------------------------------------------------- who
+
+// Painted after the shell rather than inside it: the shell must not wait on a
+// round trip, and a nav that renders 200ms late is worse than one that fills in.
+async function paintWho() {
+  const box = document.getElementById('who');
+  if (!box) return;
+  let me;
+  try {
+    me = await api.me();
+  } catch {
+    return; // signed-out is the safe assumption, and the button below says so
+  }
+  if (!me.user) {
+    box.innerHTML = me.loginConfigured
+      ? `<a class="btn who-btn" href="/auth/discord?return=${encodeURIComponent(location.pathname)}" data-ext>Sign in</a>`
+      : '';
+    return;
+  }
+  const u = me.user;
+  box.innerHTML = `
+    <div class="who">
+      ${u.discord.avatar ? `<img src="${u.discord.avatar}" alt="" width="20" height="20">` : ''}
+      <span class="wn">${esc(u.discord.name)}</span>
+      ${u.staff ? `<a class="wd" href="${IS_DASH_HOST ? '/' : 'https://example.invalid/'}" ${IS_DASH_HOST ? '' : 'data-ext'}>Dashboard</a>` : ''}
+      <button class="wo" id="logout" title="Sign out">×</button>
+    </div>`;
+  const out = document.getElementById('logout');
+  if (out) {
+    out.addEventListener('click', async () => {
+      await api.logout().catch(() => {});
+      location.reload();
+    });
+  }
 }
 
 // ------------------------------------------------------- live status pill
@@ -193,6 +240,12 @@ async function route(path, params) {
 
   try {
     if (seg.length === 0) {
+      // The dashboard host has one job, so its root is the dashboard rather than
+      // a copy of the public home page.
+      if (IS_DASH_HOST) {
+        setTitle('Dashboard');
+        return await renderDashboard(app, null);
+      }
       setTitle('');
       return await renderHome(app);
     }
@@ -222,6 +275,22 @@ async function route(path, params) {
       setTitle('Rules');
       return await renderRules(app);
     }
+    if (seg[0] === 'apply') {
+      setTitle('Apply');
+      return await renderApply(app, seg[1] || null);
+    }
+    if (seg[0] === 'report') {
+      setTitle('Report a player');
+      return await renderReport(app);
+    }
+    if (seg[0] === 'appeal') {
+      setTitle('Appeal');
+      return await renderAppeal(app);
+    }
+    if (seg[0] === 'dashboard') {
+      setTitle('Dashboard');
+      return await renderDashboard(app, seg[1] || null);
+    }
     setTitle('Not found');
     app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;
   } catch (err) {
@@ -234,5 +303,6 @@ shell();
 wireSound();
 wireSearch();
 startRouter(route);
+paintWho();
 pollLive();
 setInterval(pollLive, 30000);
