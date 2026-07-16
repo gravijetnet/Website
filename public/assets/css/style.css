@@ -547,6 +547,27 @@ h1, h2, h3, h4 { font-weight: 700; }
 .footer .f-links a { color: var(--mc-gray); font-size: 16px; text-shadow: 2px 2px 0 #2a2a2a; }
 .footer .f-links a:hover { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
 
+/* ------------------------------------------------------------------- rules */
+.rule-text {
+  color: var(--mc-gray); font-size: 16px; line-height: 1.55;
+  text-shadow: 2px 2px 0 #2a2a2a; max-width: 68ch; margin: 0;
+}
+/* A ladder reads like the Statistics screen: which offence, what happens, how
+   long. Colour carries the severity — a ban is not a mute in a different font. */
+.ladder { display: flex; flex-direction: column; }
+.rung {
+  display: grid; grid-template-columns: 46px 1fr auto; gap: 12px; align-items: baseline;
+  padding: 7px 2px; border-bottom: 2px solid rgba(255, 255, 255, 0.07);
+}
+.rung:last-child { border-bottom: 0; }
+.rung .rn { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.rung .rt { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+.rung .rt.hard { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+.rung .rd { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+/* A rung with no duration configured is not a punishment. Grey it rather than
+   let it sit in the same white as the ones that do something. */
+.rung .rd.unset { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+
 /* -------------------------------------------------------------------- misc */
 /* The loader is the game's loading bar: a sunken trough filling green. */
 .loader { padding: 44px 0; }
@@ -569,7 +590,16 @@ h1, h2, h3, h4 { font-weight: 700; }
   .stat-row { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 620px) {
-  .nav-links { display: none; }
+  /* The links used to be hidden here, which left a phone with no navigation at
+     all — survivable with three of them and the footer as a backstop, not with
+     six. They drop to their own row instead and scroll sideways if they must. */
+  .nav-inner { flex-wrap: wrap; row-gap: 8px; }
+  .nav-links {
+    order: 3; width: 100%; margin-left: 0; gap: 2px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { padding: 4px 6px; white-space: nowrap; }
   /* brand + live count + search will not fit on one line at 390px; the count
      is already on the home page, so the nav keeps brand and search. */
   .live-pill { display: none; }

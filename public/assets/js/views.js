@@ -4,7 +4,7 @@ import { api } from './api.js';
 import { icons } from './icons.js';
 import { playerCell, stat, wlBar, loader, pageLoader, notice } from './components.js';
 import {
-  esc, int, compact, dec, playtime, secs, ms, timeAgo, dateShort,
+  esc, int, compact, dec, playtime, secs, ms, timeAgo, dateShort, dur, ordinal,
   head, bodyImg, countUp,
 } from './util.js';
 
@@ -631,6 +631,135 @@ function clutchesPanel() {
           <p>Landing the impossible. Stats for this mode appear here once it goes live.</p>
         </div>
         <div style="margin-left:auto"><span class="badge soon">Soon</span></div>
+      </div>
+    </section>`;
+}
+
+// ================================================================ team ======
+
+// A rank and everyone holding it. The rank's own colour names the group, so the
+// cards below it don't each have to repeat it in a different shade.
+function teamGroup(g) {
+  const cards = g.members
+    .map(
+      (m) => `
+      <a class="dir-card entry" href="/player/${encodeURIComponent(m.name)}">
+        <img src="${head(m.uuid, 60)}" loading="lazy" alt="" onerror="this.onerror=null;this.src='${head(null, 60)}'">
+        <div style="min-width:0">
+          <div class="dn">${esc(m.name)}${m.online ? ' <span class="online-dot"></span>' : ''}</div>
+          <div class="dr" style="color:${g.rank.color}">${esc(g.rank.name)}</div>
+        </div>
+        <div class="dt">${m.online ? 'online' : timeAgo(m.lastSeen)}</div>
+      </a>`,
+    )
+    .join('');
+  return `
+    <div class="block">
+      <div class="block-label" style="color:${g.rank.color}">${esc(g.rank.name)} &mdash; ${g.members.length}</div>
+      <div class="dir-grid">${cards}</div>
+    </div>`;
+}
+
+async function renderTeam(root, { fetch: load, eyebrow, title, empty, extra = '' }) {
+  root.innerHTML = pageLoader();
+  let groups;
+  try {
+    groups = await load();
+  } catch {
+    root.innerHTML = notice(`${title} unavailable`, 'This list could not be loaded. Try again in a moment.');
+    return;
+  }
+  const total = groups.reduce((a, g) => a + g.members.length, 0);
+  root.innerHTML = `
+    <section class="section">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">${esc(eyebrow)}</span>
+            <h2>${esc(title)} &mdash; ${total}</h2>
+          </div>
+          ${extra}
+        </div>
+        ${groups.length ? groups.map(teamGroup).join('') : `<div class="empty">${esc(empty)}</div>`}
+      </div>
+    </section>`;
+}
+
+export function renderStaff(root) {
+  return renderTeam(root, {
+    fetch: api.staff,
+    eyebrow: 'Who runs the network',
+    title: 'Staff',
+    empty: 'Nobody holds a staff rank right now.',
+  });
+}
+
+export function renderMedia(root) {
+  return renderTeam(root, {
+    fetch: api.media,
+    eyebrow: 'Creators covering Gravijet',
+    title: 'Media',
+    empty: 'No media ranks have been granted yet.',
+  });
+}
+
+// =============================================================== rules ======
+
+export async function renderRules(root) {
+  root.innerHTML = pageLoader();
+  let rules;
+  try {
+    rules = await api.rules();
+  } catch {
+    root.innerHTML = notice('Rules unavailable', 'The rules could not be loaded. Try again in a moment.');
+    return;
+  }
+
+  // A kick has no length, so zero means instant. For anything else zero means
+  // the rung was never given one — Toxicity's last step is a MUTE of duration 0,
+  // which punishes nobody. Say so rather than render it as "immediate", which
+  // would read like a working rule.
+  const stepDuration = (s) => {
+    if (s.duration < 0) return 'permanent';
+    if (s.duration === 0) return s.type === 'KICK' ? 'immediate' : 'no duration set';
+    return dur(s.duration);
+  };
+
+  // Every consequence here is read from the server's own punishment ladder, so
+  // the page cannot promise something the network doesn't do.
+  const rule = (r) => `
+    <section class="panel entry">
+      ${panelHead('rules', r.title, `${r.steps.length} ${r.steps.length === 1 ? 'step' : 'steps'}`)}
+      <div class="panel-body">
+        ${r.blurb ? `<p class="rule-text">${esc(r.blurb)}</p>` : ''}
+        <div class="block">
+          <div class="block-label">What happens</div>
+          <div class="ladder">
+            ${r.steps
+              .map(
+                (s) => `
+              <div class="rung">
+                <span class="rn">${esc(ordinal(s.order))}</span>
+                <span class="rt ${s.type === 'BAN' || s.type === 'BLACKLIST' ? 'hard' : ''}">${esc(titleCase(s.type.toLowerCase()))}</span>
+                <span class="rd ${s.duration === 0 && s.type !== 'KICK' ? 'unset' : ''}">${esc(stepDuration(s))}</span>
+              </div>`,
+              )
+              .join('')}
+          </div>
+        </div>
+      </div>
+    </section>`;
+
+  root.innerHTML = `
+    <section class="section">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Ordered by how seriously we take them</span>
+            <h2>Rules</h2>
+          </div>
+        </div>
+        ${rules.map(rule).join('')}
       </div>
     </section>`;
 }

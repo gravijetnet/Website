@@ -26,6 +26,16 @@ module.exports = {
     url: process.env.MONGO_URL || 'mongodb://127.0.0.1:27017',
     practiceDb: process.env.MONGO_PRACTICE_DB || 'Bolt',
     ffaDb: process.env.MONGO_FFA_DB || 'Zephyr',
+    // Phoenix, the network core: ranks, grants, punishments, reports.
+    //
+    // There is a `phoenix` schema in MariaDB holding these same shapes, and it
+    // is NOT this. The core's global.yml says database-type: MongoDB, so the SQL
+    // one is what it used before the switch — 13 grants and 12 profiles against
+    // Mongo's 34 and 29. Reading it would show a network that stopped existing.
+    phoenixDb: process.env.MONGO_PHOENIX_DB || 'phoenix',
+    // Our own writes (applications, reports filed on the website, moderation
+    // notes). Kept out of Phoenix's database so nothing we do can confuse it.
+    siteDb: process.env.MONGO_SITE_DB || 'gravijet_site',
   },
 
   // MBedwars REST API add-on. Used for live data when the game server is

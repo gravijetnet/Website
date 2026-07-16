@@ -26,4 +26,7 @@ export const api = {
   player: (name) => get(`/player/${encodeURIComponent(name)}`),
   players: () => get('/players'),
   search: (q) => get(`/search?q=${encodeURIComponent(q)}`),
+  staff: () => get('/staff'),
+  media: () => get('/media'),
+  rules: () => get('/rules'),
 };

@@ -12,7 +12,10 @@ const DISCORD = 'https://discord.gg/xyrNc8AAH6';
 import { navigate, startRouter } from './nav.js';
 import { sound } from './sound.js';
 import { esc, head } from './util.js';
-import { renderHome, renderLeaderboards, renderPlayer, renderPlayers } from './views.js';
+import {
+  renderHome, renderLeaderboards, renderPlayer, renderPlayers,
+  renderStaff, renderMedia, renderRules,
+} from './views.js';
 
 const app = document.getElementById('app');
 
@@ -29,6 +32,9 @@ function shell() {
         <a href="/" data-match="/">Home</a>
         <a href="/leaderboards" data-match="/leaderboards">LB</a>
         <a href="/players" data-match="/players">Players</a>
+        <a href="/staff" data-match="/staff">Staff</a>
+        <a href="/media" data-match="/media">Media</a>
+        <a href="/rules" data-match="/rules">Rules</a>
       </nav>
       <div class="nav-right">
         <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">--</span></div>
@@ -51,6 +57,9 @@ function shell() {
       <div class="f-links">
         <a href="/leaderboards">Leaderboards</a>
         <a href="/players">Players</a>
+        <a href="/staff">Staff</a>
+        <a href="/media">Media</a>
+        <a href="/rules">Rules</a>
         <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
       </div>
     </div>`;
@@ -200,6 +209,18 @@ async function route(path, params) {
     if (seg[0] === 'players') {
       setTitle('Players');
       return await renderPlayers(app);
+    }
+    if (seg[0] === 'staff') {
+      setTitle('Staff');
+      return await renderStaff(app);
+    }
+    if (seg[0] === 'media') {
+      setTitle('Media');
+      return await renderMedia(app);
+    }
+    if (seg[0] === 'rules') {
+      setTitle('Rules');
+      return await renderRules(app);
     }
     setTitle('Not found');
     app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;

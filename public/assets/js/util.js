@@ -48,6 +48,28 @@ export function ms(v) {
   return (v / 1000).toFixed(2) + 's';
 }
 
+// Punishment-ladder spans. The ladders use 0 for an instant action (a kick has
+// no length) and a negative number for permanent — the last rung of Cheating is
+// duration -1, and rounding that to "0 minutes" would read as no punishment.
+export function dur(msValue) {
+  const n = Number(msValue) || 0;
+  if (n < 0) return 'permanent';
+  if (n === 0) return 'immediate';
+  const d = n / 86400000;
+  if (d >= 1) return `${Math.round(d)} ${Math.round(d) === 1 ? 'day' : 'days'}`;
+  const h = n / 3600000;
+  if (h >= 1) return `${Math.round(h)} ${Math.round(h) === 1 ? 'hour' : 'hours'}`;
+  const m = Math.max(1, Math.round(n / 60000));
+  return `${m} ${m === 1 ? 'minute' : 'minutes'}`;
+}
+
+// 1st, 2nd, 3rd, 4th…
+export function ordinal(n) {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 export function timeAgo(iso) {
   if (!iso) return '—';
   const t = typeof iso === 'number' ? iso : Date.parse(iso);

@@ -37,6 +37,27 @@ const ffa = {
   profiles: () => collection(config.mongo.ffaDb, 'zephyr-profiles'),
 };
 
+// Phoenix (network core) collections. Read-only from here — the core owns them.
+const phoenix = {
+  ranks: () => collection(config.mongo.phoenixDb, 'px-ranks'),
+  grants: () => collection(config.mongo.phoenixDb, 'px-grants'),
+  profiles: () => collection(config.mongo.phoenixDb, 'px-profiles'),
+  punishments: () => collection(config.mongo.phoenixDb, 'punishments'),
+  reports: () => collection(config.mongo.phoenixDb, 'px-reports'),
+  reportCategories: () => collection(config.mongo.phoenixDb, 'px-report-categories'),
+  punishmentLadders: () => collection(config.mongo.phoenixDb, 'px-punishmentLadders'),
+};
+
+// Ours to write.
+const site = {
+  applications: () => collection(config.mongo.siteDb, 'applications'),
+  reports: () => collection(config.mongo.siteDb, 'reports'),
+  appeals: () => collection(config.mongo.siteDb, 'appeals'),
+  links: () => collection(config.mongo.siteDb, 'links'),
+  hidden: () => collection(config.mongo.siteDb, 'hidden'),
+  audit: () => collection(config.mongo.siteDb, 'audit'),
+};
+
 async function ping() {
   try {
     const c = await client();
@@ -47,4 +68,4 @@ async function ping() {
   }
 }
 
-module.exports = { practice, ffa, ping };
+module.exports = { practice, ffa, phoenix, site, collection, ping };
