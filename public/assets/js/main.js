@@ -63,7 +63,11 @@ function markActive(path) {
 function paintSndBtn() {
   const b = document.getElementById('snd');
   if (!b) return;
-  b.innerHTML = sound.on ? icons.soundOn : icons.soundOff;
+  // `|| ''` rather than trusting the import: when a stale icons.js was cached
+  // beside a fresh main.js, this wrote the string "undefined" into the button
+  // and shipped it. The cache headers are fixed, but a missing icon should
+  // degrade to an empty button, never to text.
+  b.innerHTML = (sound.on ? icons.soundOn : icons.soundOff) || '';
   b.setAttribute('aria-pressed', String(sound.on));
 }
 
@@ -71,25 +75,22 @@ function wireSound() {
   paintSndBtn();
   document.getElementById('snd').addEventListener('click', () => {
     // Turning it off, the press itself still sounds — you pressed while it was
-    // on. Turning it on, toggle() speaks. Either way you hear exactly one tick.
+    // on. Turning it on, toggle() speaks. Either way you hear exactly one click.
     sound.toggle();
     paintSndBtn();
   });
 
-  // The dead "Clutches (soon)" tab is a <span>, so it never matches and never
-  // sounds — which is the point.
+  // One sound for everything, like the game. The dead "Clutches (soon)" tab is a
+  // <span>, so it never matches and never sounds — which is the point.
   document.addEventListener('pointerdown', (e) => {
     const el = e.target.closest('a[href], button');
-    if (!el || el.disabled) return;
-    if (el.classList.contains('crumb')) return sound.back();
-    if (el.classList.contains('lb-tab') || el.classList.contains('metric-chip')) return sound.select();
-    sound.press();
+    if (el && !el.disabled) sound.click();
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const el = document.activeElement;
-    if (el && el.matches && el.matches('a[href], button') && !el.disabled) sound.press();
+    if (el && el.matches && el.matches('a[href], button') && !el.disabled) sound.click();
   });
 }
 
@@ -213,11 +214,9 @@ async function route(path, params) {
       return await renderPlayers(app);
     }
     setTitle('Not found');
-    sound.deny();
     app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;
   } catch (err) {
     console.error(err);
-    sound.deny();
     app.innerHTML = `<div class="container"><div class="notice"><h2>Something broke</h2><p>This page failed to load. Try again in a moment.</p></div></div>`;
   }
 }

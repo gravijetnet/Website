@@ -3,7 +3,6 @@
 import { api } from './api.js';
 import { icons } from './icons.js';
 import { playerCell, stat, wlBar, loader, pageLoader, notice } from './components.js';
-import { sound } from './sound.js';
 import {
   esc, int, compact, dec, playtime, secs, ms, timeAgo, dateShort,
   head, bodyImg, countUp,
@@ -282,10 +281,12 @@ export async function renderLeaderboards(root, mode, params) {
           </div>
           <p>Ranked from live server data. Any row opens that player's full profile.</p>
         </div>
-        <div class="rule"></div>
-        <div class="lb-tabs">
-          ${MODE_ORDER.map((m) => `<a class="lb-tab btn ${m === mode ? 'active' : ''}" href="/leaderboards/${m}">${MODE_LABEL[m]}</a>`).join('')}
-          <span class="lb-tab dead btn" title="Coming soon">Clutches (soon)</span>
+        <div class="lb-controls">
+          <div class="lb-tabs">
+            ${MODE_ORDER.map((m) => `<a class="lb-tab btn ${m === mode ? 'active' : ''}" href="/leaderboards/${m}">${MODE_LABEL[m]}</a>`).join('')}
+            <span class="lb-tab dead btn" title="Coming soon">Clutches (soon)</span>
+          </div>
+          <div id="lb-filters"></div>
         </div>
         <div id="lb-body">${loader()}</div>
       </div>
@@ -296,7 +297,6 @@ export async function renderLeaderboards(root, mode, params) {
   try {
     data = await api.leaderboard(mode, { metric, kit, limit: 100 });
   } catch {
-    sound.deny();
     body.innerHTML = `<div class="board"><div class="empty">This ladder is unavailable right now.</div></div>`;
     return;
   }
@@ -345,10 +345,12 @@ export async function renderLeaderboards(root, mode, params) {
       </div>`;
   }
 
+  // Filters belong to the controls band above, not on top of the table.
+  const filters = root.querySelector('#lb-filters');
+  if (filters) filters.innerHTML = `${chips ? `<div class="chips">${chips}</div>` : ''}${kitBar}`;
+
   if (!data.entries.length) {
-    body.innerHTML = `${chips ? `<div class="chips">${chips}</div>` : ''}${kitBar}
-      <div class="rule" style="margin-top:16px"></div>
-      <div class="board" style="margin-top:16px"><div class="empty">No ranked players in this category yet — be the first.</div></div>`;
+    body.innerHTML = '<div class="board"><div class="empty">No ranked players in this category yet — be the first.</div></div>';
     return;
   }
 
@@ -372,13 +374,8 @@ export async function renderLeaderboards(root, mode, params) {
     })
     .join('');
 
-  // A rule between the controls and the table: without one they ran together,
-  // and a filter row looked like part of the data it filters.
   body.innerHTML = `
-    ${chips ? `<div class="chips">${chips}</div>` : ''}
-    ${kitBar}
-    <div class="rule" style="margin-top:16px"></div>
-    <div class="board" style="margin-top:16px">
+    <div class="board">
       <div class="board-head" style="grid-template-columns:${grid}">
         <span>#</span><span>Player</span>
         ${keys.map((k) => `<span class="r">${esc(cfg.defs[k].label)}</span>`).join('')}
@@ -396,7 +393,6 @@ export async function renderPlayer(root, name) {
   try {
     p = await api.player(name);
   } catch (err) {
-    sound.deny();
     root.innerHTML =
       err.status === 404
         ? notice('No such player', `Nobody named "${name}" has ever joined Gravijet. Check the spelling and try again.`)
@@ -639,7 +635,6 @@ export async function renderPlayers(root) {
   try {
     list = await api.players();
   } catch {
-    sound.deny();
     root.innerHTML = notice('Directory unavailable', 'The player registry could not be loaded. Try again in a moment.');
     return;
   }

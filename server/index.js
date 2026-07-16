@@ -18,13 +18,25 @@ app.use('/api', api);
 
 // --- Static frontend ------------------------------------------------------
 const PUBLIC = path.join(__dirname, '..', 'public');
+// The JS modules import each other by path and carry no version in their URLs,
+// so they must expire together or not at all. They didn't: express.static's
+// default is `public, max-age=0`, which Cloudflare reads as "cacheable, no
+// opinion" and rewrites to its own 4h browser TTL — a visitor could then hold a
+// four-hour-old icons.js beside a fresh main.js. That is a real bug, not a
+// theoretical one: it is why the sound button rendered the string "undefined"
+// (old icons.js, no `soundOn`) and why the mode icons rendered enormous (old
+// style.css, no rule for `.mode-row .glyph svg`, so the SVGs fell back to their
+// default size). `no-cache` still stores the file, it just forces revalidation,
+// so the ETag turns each check into a cheap 304 and the set can never skew.
+const IMMUTABLE = /\.(woff2|png|webp|svg|jpg|mp3|ogg|wav)$/;
 app.use(
   express.static(PUBLIC, {
     index: false,
     setHeaders(res, filePath) {
-      if (/\.(woff2|png|webp|svg|jpg)$/.test(filePath)) {
-        res.setHeader('Cache-Control', 'public, max-age=2592000');
-      }
+      res.setHeader(
+        'Cache-Control',
+        IMMUTABLE.test(filePath) ? 'public, max-age=2592000' : 'no-cache',
+      );
     },
   }),
 );
@@ -40,6 +52,8 @@ const HAS_EXTENSION = /\.[a-z0-9]{2,5}$/i;
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
   if (HAS_EXTENSION.test(req.path)) return next();
+  // The shell names every script and stylesheet, so a stale one pins a stale set.
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(PUBLIC, 'index.html'));
 });
 
