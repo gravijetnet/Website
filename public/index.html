@@ -26,7 +26,13 @@
   <header class="nav" id="nav"></header>
   <main id="app"></main>
   <footer class="footer" id="footer"></footer>
-  <script type="module" src="/assets/js/main.js"></script>
+  <!-- data-cfasync="false" is the documented opt-out from Cloudflare's Rocket
+       Loader, which is on for this zone and was rewriting type="module" to
+       type="<token>-module" so the browser would ignore the tag and let Rocket
+       Loader run it later instead. That trick is built for classic scripts; this
+       is an ES module graph, and having it deferred and re-entered by a third
+       party is a fragility nobody asked for. -->
+  <script type="module" data-cfasync="false" src="/assets/js/main.js"></script>
   <noscript>
     <div class="notice">
       <h2>JavaScript required</h2>
