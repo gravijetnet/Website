@@ -13,7 +13,7 @@ function shell() {
     <div class="container nav-inner">
       <a class="brand" href="/">
         <img src="/assets/img/logo.webp" alt="" onerror="this.style.display='none'">
-        <span class="word">GRAVIJET<i>//</i>STATS</span>
+        <span class="word">GRAVIJET<i>//</i><em>STATS</em></span>
       </a>
       <nav class="nav-links">
         <a href="/" data-match="/">Home</a>
@@ -34,7 +34,7 @@ function shell() {
       <div>
         <div class="brand">
           <img src="/assets/img/logo.webp" alt="" onerror="this.style.display='none'">
-          <span class="word">GRAVIJET<i>//</i>STATS</span>
+          <span class="word">GRAVIJET<i>//</i><em>STATS</em></span>
         </div>
         <div class="f-copy">example.invalid &nbsp;//&nbsp; statistics</div>
       </div>
