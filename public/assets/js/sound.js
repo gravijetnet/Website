@@ -11,7 +11,9 @@
 // less than the argument against it.
 
 const KEY = 'gj-sound';
-const URL = '/assets/sfx/click.wav';
+// Resolved against this module's own URL, so it follows the versioned asset
+// directory automatically instead of pinning the unversioned copy.
+const SRC = new URL('../sfx/click.wav', import.meta.url).href;
 
 let ctx = null;
 let master = null;
@@ -36,7 +38,7 @@ function boot() {
   master.connect(ctx.destination);
 
   // Async: the first press or two may be silent, every one after is not.
-  fetch(URL, { cache: 'force-cache' })
+  fetch(SRC, { cache: 'force-cache' })
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
     .then((b) => ctx.decodeAudioData(b))
     .then((decoded) => { buf = decoded; })

@@ -98,7 +98,7 @@ body {
   font-size: 16px;
   line-height: 1.5;
   color: var(--mc-white);
-  background: #0d0a07 url('/assets/img/dirt.png') repeat;
+  background: #0d0a07 url('../img/dirt.png') repeat;
   background-size: 64px 64px;
   image-rendering: pixelated;
   overflow-x: hidden;
@@ -128,10 +128,10 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 /* Links and buttons are named explicitly rather than left to inherit from body:
    the browser's own sheet says a:link { cursor: pointer }, and an inherited
    value loses to any rule that actually matches — including the browser's. */
-body, a[href], button, summary, [role='button'] { cursor: url('/assets/img/crosshair.png') 16 16, crosshair; }
+body, a[href], button, summary, [role='button'] { cursor: url('../img/crosshair.png') 16 16, crosshair; }
 /* The one exception. A crosshair is for aiming at a thing; typing means aiming
    between two letters, and that's what an I-beam is for. */
-input, textarea { cursor: url('/assets/img/cursor-text.png') 16 16, text; }
+input, textarea { cursor: url('../img/cursor-text.png') 16 16, text; }
 
 /* -------------------------------------------------------------- scrollbar */
 /* The game does have this widget, so it's lifted rather than invented: a black

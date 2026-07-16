@@ -1,5 +1,8 @@
 // App shell: persistent nav (brand, links, live pill, search) + the route table.
 import { api } from './api.js';
+
+// Same reason as sound.js: follow the versioned directory this module came from.
+const LOGO = new URL('../img/logo.webp', import.meta.url).href;
 import { icons } from './icons.js';
 import { navigate, startRouter } from './nav.js';
 import { sound } from './sound.js';
@@ -14,7 +17,7 @@ function shell() {
   document.getElementById('nav').innerHTML = `
     <div class="container nav-inner">
       <a class="brand" href="/">
-        <img src="/assets/img/logo.webp" alt="" onerror="this.style.display='none'">
+        <img src="${LOGO}" alt="" onerror="this.style.display='none'">
         <span class="word">GRAVIJET<i>//</i><em>STATS</em></span>
       </a>
       <nav class="nav-links">
@@ -36,7 +39,7 @@ function shell() {
     <div class="container footer-inner">
       <div>
         <div class="brand">
-          <img src="/assets/img/logo.webp" alt="" onerror="this.style.display='none'">
+          <img src="${LOGO}" alt="" onerror="this.style.display='none'">
           <span class="word">GRAVIJET<i>//</i><em>STATS</em></span>
         </div>
         <div class="f-copy">example.invalid &nbsp;//&nbsp; statistics</div>

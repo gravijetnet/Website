@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const config = require('./config');
@@ -18,16 +20,46 @@ app.use('/api', api);
 
 // --- Static frontend ------------------------------------------------------
 const PUBLIC = path.join(__dirname, '..', 'public');
-// The JS modules import each other by path and carry no version in their URLs,
-// so they must expire together or not at all. They didn't: express.static's
-// default is `public, max-age=0`, which Cloudflare reads as "cacheable, no
-// opinion" and rewrites to its own 4h browser TTL — a visitor could then hold a
-// four-hour-old icons.js beside a fresh main.js. That is a real bug, not a
-// theoretical one: it is why the sound button rendered the string "undefined"
-// (old icons.js, no `soundOn`) and why the mode icons rendered enormous (old
-// style.css, no rule for `.mode-row .glyph svg`, so the SVGs fell back to their
-// default size). `no-cache` still stores the file, it just forces revalidation,
-// so the ETag turns each check into a cheap 304 and the set can never skew.
+const ASSETS = path.join(PUBLIC, 'assets');
+
+// The whole asset tree hashed into one id, and the tree is served from a
+// directory named after it. A deploy therefore changes every asset URL at once,
+// and a browser physically cannot pair a file from this deploy with one from the
+// last — which is the bug this exists for. It shipped: an old icons.js (no
+// `soundOn`) beside a fresh main.js put the literal string "undefined" in the
+// sound button, and an old style.css (no rule for `.mode-row .glyph svg`) left
+// the mode icons at an SVG's default size.
+//
+// Headers cannot fix it here. The origin sends `no-cache`, and Cloudflare's
+// Browser Cache TTL rewrites it to `max-age=14400` at the edge — verified with a
+// cache-buster against a confirmed MISS, so it is not stale-edge, it is policy,
+// and there are no Cloudflare credentials on this box to change it. A path we
+// choose is a thing we control; a header we send is not.
+//
+// Content, not mtime: a git checkout rewrites mtimes and would churn the id on
+// every deploy whether or not anything changed.
+function hashTree(dir) {
+  const h = crypto.createHash('sha1');
+  (function walk(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else h.update(e.name).update(fs.readFileSync(p));
+    }
+  })(dir);
+  return h.digest('hex').slice(0, 10);
+}
+const VER = hashTree(ASSETS);
+
+// Versioned: the id changes whenever any byte does, so this can never go stale.
+app.use(
+  `/assets-${VER}`,
+  express.static(ASSETS, { index: false, immutable: true, maxAge: '365d' }),
+);
+
+// Unversioned, still mounted: og:image points here (a stable URL matters more to
+// a social scraper than freshness does), and it keeps any path missed by the
+// rewrite working rather than 404ing. Revalidate, since these URLs never change.
 const IMMUTABLE = /\.(woff2|png|webp|svg|jpg|mp3|ogg|wav)$/;
 app.use(
   express.static(PUBLIC, {
@@ -41,6 +73,13 @@ app.use(
   }),
 );
 
+// The shell names the entry points, so it is what pins a version — it must never
+// be held. Rewritten once at boot, not per request.
+// `="/assets/` only: og:image is an absolute https:// URL and is left alone.
+const SHELL = fs
+  .readFileSync(path.join(PUBLIC, 'index.html'), 'utf8')
+  .replace(/="\/assets\//g, `="/assets-${VER}/`);
+
 // SPA fallback: client-side routes render the app shell.
 //
 // A request for a *file* that express.static didn't find must 404 rather than
@@ -52,9 +91,8 @@ const HAS_EXTENSION = /\.[a-z0-9]{2,5}$/i;
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
   if (HAS_EXTENSION.test(req.path)) return next();
-  // The shell names every script and stylesheet, so a stale one pins a stale set.
   res.setHeader('Cache-Control', 'no-cache');
-  res.sendFile(path.join(PUBLIC, 'index.html'));
+  res.type('html').send(SHELL);
 });
 
 app.use((req, res) => res.status(404).json({ error: 'not_found' }));
