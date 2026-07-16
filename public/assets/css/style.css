@@ -452,10 +452,6 @@ h1, h2, h3, h4 { font-weight: 800; line-height: 1; letter-spacing: -0.03em; text
 .notice p { color: var(--ash); font-size: 13px; max-width: 56ch; }
 .notice a { color: var(--signal); border-bottom: 1px solid var(--signal); }
 
-/* Reveal is a hard cut, not a fade-and-float. */
-.reveal { opacity: 0; }
-.reveal.in { opacity: 1; }
-
 /* -------------------------------------------------------------- responsive */
 /* The collapse model closes every cell itself, so breakpoints only ever need to
    change the column count — no per-edge border patching. */
@@ -483,6 +479,5 @@ h1, h2, h3, h4 { font-weight: 800; line-height: 1; letter-spacing: -0.03em; text
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .reveal { opacity: 1; }
   .cursor { opacity: 1; }
 }

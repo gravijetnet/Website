@@ -45,7 +45,9 @@ const METRICS = {
   },
   fastbuilder: {
     label: 'FastBuilder',
+    // It's a bridging race, so time leads; XP and coins are just progression.
     metrics: [
+      { key: 'best_time', label: 'Best time' },
       { key: 'experience', label: 'Experience' },
       { key: 'coins', label: 'Coins' },
     ],
@@ -57,7 +59,7 @@ async function build(mode, metric, limit, kit) {
   if (mode === 'bedwars') rows = await bedwars.leaderboard(metric, limit);
   else if (mode === 'practice') rows = await practice.leaderboard(metric, limit, kit);
   else if (mode === 'ffa') rows = await ffa.leaderboard(metric, limit);
-  else if (mode === 'fastbuilder') rows = await fastbuilder.leaderboard(metric, limit);
+  else if (mode === 'fastbuilder') rows = await fastbuilder.leaderboard(metric, limit, kit);
   else return null;
   return withIdentity(rows);
 }
@@ -74,7 +76,12 @@ router.get('/leaderboards/:mode', async (req, res) => {
   try {
     const key = `lb:${mode}:${metric}:${kit || '-'}:${limit}`;
     const entries = await cached(key, 15000, () => build(mode, metric, limit, kit));
-    const kits = mode === 'practice' ? await cached('practice:kits', 60000, practice.kitCatalog) : [];
+    // `kits` doubles as the sub-filter catalog: practice kits, FastBuilder maps.
+    let kits = [];
+    if (mode === 'practice') kits = await cached('practice:kits', 60000, practice.kitCatalog);
+    else if (mode === 'fastbuilder' && metric === 'best_time') {
+      kits = await cached('fastbuilder:maps', 60000, fastbuilder.mapCatalog);
+    }
     res.json({ mode, metric, kit, label: cfg.label, metrics: cfg.metrics, kits, entries });
   } catch (err) {
     console.error('[leaderboards]', err);

@@ -5,7 +5,7 @@ import { icons } from './icons.js';
 import { playerCell, stat, wlBar, loader, pageLoader, notice } from './components.js';
 import {
   esc, int, compact, dec, playtime, secs, ms, timeAgo, dateShort,
-  head, bodyImg, countUp, reveal,
+  head, bodyImg, countUp,
 } from './util.js';
 
 // ---------------------------------------------------------------- shared bits
@@ -32,7 +32,7 @@ function panelHead(key, title, sub, right = '') {
 }
 
 function emptyPanel(key, title, sub, message) {
-  return `<section class="panel reveal">${panelHead(key, title, sub)}<div class="panel-body"><div class="empty">${esc(message)}</div></div></section>`;
+  return `<section class="panel">${panelHead(key, title, sub)}<div class="panel-body"><div class="empty">${esc(message)}</div></div></section>`;
 }
 
 function titleCase(s) {
@@ -62,7 +62,7 @@ export async function renderHome(root) {
       : '';
     if (m.status === 'soon') {
       return `
-        <div class="mode-card soon reveal">
+        <div class="mode-card soon">
           <div class="badge-soon"><span class="badge soon">Soon</span></div>
           ${glyph}
           <h3>${esc(m.name)}</h3>
@@ -72,7 +72,7 @@ export async function renderHome(root) {
     }
     const badge = m.live ? '<div class="badge-soon"><span class="badge live">Live</span></div>' : '';
     return `
-      <a class="mode-card enter reveal" href="/leaderboards/${m.key}">
+      <a class="mode-card enter" href="/leaderboards/${m.key}">
         ${badge}
         ${glyph}
         <h3>${esc(m.name)}</h3>
@@ -91,7 +91,7 @@ export async function renderHome(root) {
               <span class="sweep">Sharpen</span>
               <span class="sweep acid">every mechanic.</span>
             </h1>
-            <p class="lede">Bridging, clutching, PvP and speed-building. Every round you play on Gravijet is measured, ranked and kept — across all five gamemodes.</p>
+            <p class="lede">Bridging, clutching, PvP and bed rushes. Every round you play on Gravijet is measured, ranked and kept — across all five gamemodes.</p>
             <div class="hero-actions">
               <a class="btn btn-primary" href="/leaderboards">Leaderboards</a>
               <a class="btn" href="/players">Players</a>
@@ -103,7 +103,7 @@ export async function renderHome(root) {
             </div>
           </div>
 
-          <div class="readout reveal">
+          <div class="readout">
             <div class="readout-bar"><span>System status</span><span>example.invalid</span></div>
             <div class="readout-body">
               <div class="readout-big">
@@ -124,7 +124,7 @@ export async function renderHome(root) {
 
     <section class="section">
       <div class="container">
-        <div class="telemetry grid-collapse reveal">
+        <div class="telemetry grid-collapse">
           <div class="cell"><div class="v">${int(n.totalPlayers)}</div><div class="l">Players</div></div>
           <div class="cell"><div class="v">${int(n.peakOnline)}</div><div class="l">Peak online</div></div>
           <div class="cell"><div class="v">${int(n.totalBans)}</div><div class="l">Bans</div></div>
@@ -153,7 +153,7 @@ export async function renderHome(root) {
 
   const big = root.querySelector('#stat-online');
   if (big) countUp(big, n.currentOnline, { format: (v) => pad(v), ms: 900 });
-  reveal(root);
+
 }
 
 const GRID_SPOT = '44px 1fr 84px 84px';
@@ -182,7 +182,7 @@ function spotlightSection(spot) {
           </div>
           <a class="btn" href="/leaderboards/practice">Full ladder</a>
         </div>
-        <div class="board reveal">
+        <div class="board">
           <div class="board-head" style="grid-template-columns:${GRID_SPOT}">
             <span>#</span><span>Player</span><span class="r">Wins</span><span class="r">Elo</span>
           </div>
@@ -196,7 +196,7 @@ function onlineSection(list) {
   const cards = list
     .map(
       (p) => `
-      <a class="dir-card reveal" href="/player/${encodeURIComponent(p.name)}">
+      <a class="dir-card" href="/player/${encodeURIComponent(p.name)}">
         <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/60'">
         <div style="min-width:0">
           <div class="dn">${esc(p.name)} <span class="online-dot"></span></div>
@@ -253,12 +253,21 @@ const COLS = {
     },
   },
   fastbuilder: {
-    order: ['experience', 'coins'],
+    order: ['best_time', 'maps', 'successes'],
     defs: {
+      best_time: { label: 'Best', get: (s) => s.bestTime, fmt: ms },
+      maps: { label: 'Maps', get: (s) => s.maps, fmt: int },
+      successes: { label: 'Runs', get: (s) => s.successes, fmt: int },
       experience: { label: 'Xp', get: (s) => s.experience, fmt: compact },
       coins: { label: 'Coins', get: (s) => s.coins, fmt: compact },
     },
   },
+};
+
+// Which sub-filter a mode offers, and what to call it.
+const SUBFILTER = {
+  practice: { label: 'All kits', param: 'kit' },
+  fastbuilder: { label: 'All maps', param: 'kit' },
 };
 
 export async function renderLeaderboards(root, mode, params) {
@@ -296,6 +305,10 @@ export async function renderLeaderboards(root, mode, params) {
   const active = data.metric;
   const cfg = COLS[mode];
   const kitMode = mode === 'practice' && !!data.kit;
+  // FastBuilder's XP/coins rows come from a different table than its time rows,
+  // so they carry different fields — pick the column set to match.
+  const colOrder =
+    mode === 'fastbuilder' && active !== 'best_time' ? ['experience', 'coins'] : cfg.order;
 
   // The section prompt reads like a query: > duels.wins.bedfight
   const crumb = root.querySelector('#lb-crumb');
@@ -314,17 +327,19 @@ export async function renderLeaderboards(root, mode, params) {
     })
     .join('');
 
+  // Sub-filter: practice kits, or FastBuilder maps on the time ladder.
   let kitBar = '';
-  if (mode === 'practice' && data.kits.length) {
+  const sub = SUBFILTER[mode];
+  if (sub && data.kits.length) {
     const link = (k) => {
       const q = new URLSearchParams();
       q.set('metric', active);
-      if (k) q.set('kit', k.key);
-      return `/leaderboards/practice?${q}`;
+      if (k) q.set(sub.param, k.key);
+      return `/leaderboards/${mode}?${q}`;
     };
     kitBar = `
       <div class="kit-select bar-collapse">
-        <a class="metric-chip ${!data.kit ? 'active' : ''}" href="${link(null)}">All kits</a>
+        <a class="metric-chip ${!data.kit ? 'active' : ''}" href="${link(null)}">${esc(sub.label)}</a>
         ${data.kits.map((k) => `<a class="metric-chip ${data.kit === k.key ? 'active' : ''}" href="${link(k)}">${esc(k.label)}</a>`).join('')}
       </div>`;
   }
@@ -336,7 +351,7 @@ export async function renderLeaderboards(root, mode, params) {
   }
 
   // Show the active metric first, then the mode's default columns (max 4).
-  const keys = [...new Set([active, ...cfg.order])].filter((k) => cfg.defs[k]).slice(0, 4);
+  const keys = [...new Set([active, ...colOrder])].filter((k) => cfg.defs[k]).slice(0, 4);
   const grid = `44px 1fr ${keys.map(() => '92px').join(' ')}`;
 
   const rows = data.entries
@@ -358,14 +373,14 @@ export async function renderLeaderboards(root, mode, params) {
   body.innerHTML = `
     ${chips ? `<div class="chips bar-collapse">${chips}</div>` : ''}
     ${kitBar}
-    <div class="board reveal" style="margin-top:18px">
+    <div class="board" style="margin-top:18px">
       <div class="board-head" style="grid-template-columns:${grid}">
         <span>#</span><span>Player</span>
         ${keys.map((k) => `<span class="r">${esc(cfg.defs[k].label)}</span>`).join('')}
       </div>
       ${rows}
     </div>`;
-  reveal(root);
+
 }
 
 // ============================================================== player ======
@@ -426,14 +441,14 @@ export async function renderPlayer(root, name) {
     </div>`;
 
   root.querySelectorAll('[data-count]').forEach((el) => countUp(el, Number(el.dataset.count)));
-  reveal(root);
+
 }
 
 function bedwarsPanel(b) {
   if (!b || !b.hasData) return emptyPanel('bedwars', 'Bedwars', 'MBedwars', 'No Bedwars rounds played yet.');
   const sub = `${int(b.rounds)} rounds · ${dec(b.winRate, 1)}% win rate`;
   return `
-    <section class="panel reveal">
+    <section class="panel">
       ${panelHead('bedwars', 'Bedwars', sub, `<span class="badge">${int(b.topWinStreak)} best streak</span>`)}
       <div class="panel-body">
         <div class="stat-row">
@@ -508,7 +523,7 @@ function practicePanel(pr) {
     : '<div class="empty">No recorded matches yet.</div>';
 
   return `
-    <section class="panel reveal">
+    <section class="panel">
       ${panelHead(
         'practice',
         'Duels',
@@ -552,7 +567,7 @@ function practicePanel(pr) {
 function ffaPanel(f) {
   if (!f || !f.hasData) return emptyPanel('ffa', 'FFA', 'Open arena', 'No FFA fights recorded yet.');
   return `
-    <section class="panel reveal">
+    <section class="panel">
       ${panelHead('ffa', 'FFA', `Kill effect: ${esc(f.killEffect.toLowerCase())}`, `<span class="badge">${int(f.bestStreak)} best streak</span>`)}
       <div class="panel-body">
         <div class="stat-row">
@@ -566,10 +581,10 @@ function ffaPanel(f) {
 }
 
 function fastbuilderPanel(fb) {
-  if (!fb || !fb.hasData) return emptyPanel('fastbuilder', 'FastBuilder', 'Speed-build sprints', 'No builds completed yet.');
+  if (!fb || !fb.hasData) return emptyPanel('fastbuilder', 'FastBuilder', 'Island-to-island bridging', 'No bridge runs completed yet.');
   const maps = (fb.maps || []).length
     ? `<div class="block">
-        <div class="block-label">Best times</div>
+        <div class="block-label">Best bridge times</div>
         <div class="matches">${fb.maps
           .map(
             (mp) => `
@@ -577,7 +592,7 @@ function fastbuilderPanel(fb) {
               <div class="res w"></div>
               <div class="m-info">
                 <div class="mk">${esc(mp.map)}</div>
-                <div class="mo">${int(mp.successes)} / ${int(mp.attempts)} completed</div>
+                <div class="mo">${int(mp.successes)} / ${int(mp.attempts)} runs completed</div>
               </div>
               <div class="m-right"><div class="rr w">${ms(mp.bestTime)}</div><div class="rd">personal best</div></div>
             </div>`,
@@ -586,13 +601,13 @@ function fastbuilderPanel(fb) {
       </div>`
     : '';
   return `
-    <section class="panel reveal">
-      ${panelHead('fastbuilder', 'FastBuilder', `${(fb.maps || []).length} maps timed`)}
+    <section class="panel">
+      ${panelHead('fastbuilder', 'FastBuilder', `${(fb.maps || []).length} maps bridged`)}
       <div class="panel-body">
         <div class="stat-row">
           ${stat(compact(fb.experience), 'Experience')}
           ${stat(compact(fb.coins), 'Coins')}
-          ${stat(int((fb.maps || []).length), 'Maps timed')}
+          ${stat(int((fb.maps || []).length), 'Maps bridged')}
         </div>
         ${maps}
       </div>
@@ -601,7 +616,7 @@ function fastbuilderPanel(fb) {
 
 function clutchesPanel() {
   return `
-    <section class="panel reveal">
+    <section class="panel">
       <div class="soon-state">
         <div class="glyph">${icons.clutches}</div>
         <div>
@@ -628,7 +643,7 @@ export async function renderPlayers(root) {
   const cards = list
     .map(
       (p) => `
-      <a class="dir-card reveal" href="/player/${encodeURIComponent(p.name)}">
+      <a class="dir-card" href="/player/${encodeURIComponent(p.name)}">
         <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/60'">
         <div style="min-width:0">
           <div class="dn">${esc(p.name)}${p.online ? ' <span class="online-dot"></span>' : ''}</div>
@@ -652,5 +667,5 @@ export async function renderPlayers(root) {
         <div class="dir-grid grid-collapse">${cards || '<div class="empty">The registry is empty.</div>'}</div>
       </div>
     </section>`;
-  reveal(root);
+
 }

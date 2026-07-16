@@ -97,13 +97,3 @@ export function countUp(node, to, { format = int, ms: dur = 900 } = {}) {
   }
   requestAnimationFrame(step);
 }
-
-// Intersection-based reveal for sections.
-const io = 'IntersectionObserver' in window
-  ? new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
-    }, { threshold: 0.12 })
-  : null;
-export function reveal(root = document) {
-  root.querySelectorAll('.reveal:not(.in)').forEach((n) => (io ? io.observe(n) : n.classList.add('in')));
-}

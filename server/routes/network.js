@@ -81,11 +81,11 @@ async function buildOverview() {
     {
       key: 'fastbuilder',
       name: 'FastBuilder',
-      tag: 'Speed-build sprints',
+      tag: 'Island-to-island bridging, against the clock',
       status: 'active',
       players: fb.length,
       headline: [
-        { label: 'Builders', value: fb.length },
+        { label: 'Bridgers', value: fb.length },
         { label: 'Total XP', value: sum(fb, (p) => p.experience) },
       ],
     },

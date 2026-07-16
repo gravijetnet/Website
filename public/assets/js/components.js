@@ -19,10 +19,6 @@ export function stat(value, label, cls = '') {
   return `<div class="stat"><div class="v ${cls}">${value}</div><div class="l">${esc(label)}</div></div>`;
 }
 
-export function sumTile(value, label) {
-  return `<div class="sum-tile reveal"><div class="v num">${value}</div><div class="l">${esc(label)}</div></div>`;
-}
-
 // Win/loss split bar. wins/losses are raw counts. `label` names what the middle
 // percentage measures — modes differ (Bedwars counts rounds a player left, so
 // its W/L split is not the same number as its win rate over all rounds).
