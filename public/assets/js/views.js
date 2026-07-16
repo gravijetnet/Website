@@ -282,6 +282,7 @@ export async function renderLeaderboards(root, mode, params) {
           </div>
           <p>Ranked from live server data. Any row opens that player's full profile.</p>
         </div>
+        <div class="rule"></div>
         <div class="lb-tabs">
           ${MODE_ORDER.map((m) => `<a class="lb-tab btn ${m === mode ? 'active' : ''}" href="/leaderboards/${m}">${MODE_LABEL[m]}</a>`).join('')}
           <span class="lb-tab dead btn" title="Coming soon">Clutches (soon)</span>
@@ -323,7 +324,7 @@ export async function renderLeaderboards(root, mode, params) {
       const q = new URLSearchParams();
       q.set('metric', m.key);
       if (data.kit) q.set('kit', data.kit);
-      return `<a class="metric-chip btn ${m.key === active ? 'active' : ''}" href="/leaderboards/${mode}?${q}">${esc(m.label)}</a>`;
+      return `<a class="metric-chip ${m.key === active ? 'active' : ''}" href="/leaderboards/${mode}?${q}">${esc(m.label)}</a>`;
     })
     .join('');
 
@@ -339,14 +340,15 @@ export async function renderLeaderboards(root, mode, params) {
     };
     kitBar = `
       <div class="kit-select">
-        <a class="metric-chip btn ${!data.kit ? 'active' : ''}" href="${link(null)}">${esc(sub.label)}</a>
-        ${data.kits.map((k) => `<a class="metric-chip btn ${data.kit === k.key ? 'active' : ''}" href="${link(k)}">${esc(k.label)}</a>`).join('')}
+        <a class="metric-chip ${!data.kit ? 'active' : ''}" href="${link(null)}">${esc(sub.label)}</a>
+        ${data.kits.map((k) => `<a class="metric-chip ${data.kit === k.key ? 'active' : ''}" href="${link(k)}">${esc(k.label)}</a>`).join('')}
       </div>`;
   }
 
   if (!data.entries.length) {
     body.innerHTML = `${chips ? `<div class="chips">${chips}</div>` : ''}${kitBar}
-      <div class="board" style="margin-top:18px"><div class="empty">No ranked players in this category yet — be the first.</div></div>`;
+      <div class="rule" style="margin-top:16px"></div>
+      <div class="board" style="margin-top:16px"><div class="empty">No ranked players in this category yet — be the first.</div></div>`;
     return;
   }
 
@@ -370,10 +372,13 @@ export async function renderLeaderboards(root, mode, params) {
     })
     .join('');
 
+  // A rule between the controls and the table: without one they ran together,
+  // and a filter row looked like part of the data it filters.
   body.innerHTML = `
     ${chips ? `<div class="chips">${chips}</div>` : ''}
     ${kitBar}
-    <div class="board" style="margin-top:18px">
+    <div class="rule" style="margin-top:16px"></div>
+    <div class="board" style="margin-top:16px">
       <div class="board-head" style="grid-template-columns:${grid}">
         <span>#</span><span>Player</span>
         ${keys.map((k) => `<span class="r">${esc(cfg.defs[k].label)}</span>`).join('')}

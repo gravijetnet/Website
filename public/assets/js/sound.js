@@ -78,6 +78,23 @@ export function voice(ac, out, noiseBuf, t, pitch = 1, gain = 0.5) {
   strike(560, 4.5, 0.055, 8.5);  // the body — rings just long enough to be wood
 }
 
+// If a click has been placed at SAMPLE_URL, it wins over the synth. Nothing is
+// shipped with the site and nothing is fetched from anywhere else: the file is
+// absent unless someone puts it there, and 404 is a normal, expected answer.
+// Whoever adds one is deciding they have the right to serve it.
+const SAMPLE_URL = '/assets/sfx/click.ogg';
+let sample = null;
+
+async function loadSample(ac) {
+  try {
+    const r = await fetch(SAMPLE_URL, { cache: 'force-cache' });
+    if (!r.ok) return null;
+    sample = await ac.decodeAudioData(await r.arrayBuffer());
+  } catch {
+    /* no file, or not decodable: the synth stays. */
+  }
+}
+
 // Built on the first tick, which is always inside a user gesture — browsers
 // refuse to start an AudioContext any earlier.
 function boot() {
@@ -89,6 +106,7 @@ function boot() {
   master.gain.value = 0.45;
   master.connect(ctx.destination);
   noise = makeNoise(ctx);
+  loadSample(ctx); // async — the first click or two may still be synthesised
 }
 
 function tick(pitch = 1, gain = 0.5, delay = 0) {
@@ -96,7 +114,21 @@ function tick(pitch = 1, gain = 0.5, delay = 0) {
   boot();
   if (!ctx) return;
   if (ctx.state === 'suspended') ctx.resume();
-  voice(ctx, master, noise, ctx.currentTime + delay, pitch, gain);
+  const t = ctx.currentTime + delay;
+
+  if (!sample) return voice(ctx, master, noise, t, pitch, gain);
+
+  // playbackRate repitches by resampling, which is what the game does to vary a
+  // sound too — so the four pitches carry over to a real file unchanged.
+  const s = ctx.createBufferSource();
+  s.buffer = sample;
+  s.playbackRate.value = pitch;
+  // Same gain as the synth: a real click file is normalised, so master (0.45)
+  // times this lands at ~0.22 peak — near where the synth measures anyway.
+  const g = ctx.createGain();
+  g.gain.value = gain;
+  s.connect(g).connect(master);
+  s.start(t);
 }
 
 export const PITCH = { press: 1, select: 1.34, back: 0.76, deny: 0.5 };
