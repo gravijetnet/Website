@@ -2,7 +2,7 @@
 // needs and paints once — no virtual DOM, no framework, no re-render churn.
 import { api } from './api.js';
 import { icons } from './icons.js';
-import { playerCell, stat, wlBar, loader, notice } from './components.js';
+import { playerCell, stat, wlBar, loader, pageLoader, notice } from './components.js';
 import {
   esc, int, compact, dec, playtime, secs, ms, timeAgo, dateShort,
   head, bodyImg, countUp, reveal,
@@ -12,6 +12,12 @@ import {
 
 const MODE_ORDER = ['bedwars', 'practice', 'ffa', 'fastbuilder'];
 const MODE_LABEL = { bedwars: 'Bedwars', practice: 'Duels', ffa: 'FFA', fastbuilder: 'FastBuilder' };
+
+// Numbers in the readout are zero-padded — it's a machine display.
+function pad(n, w = 2) {
+  const s = String(Math.round(Number(n) || 0));
+  return s.length >= w ? s : '0'.repeat(w - s.length) + s;
+}
 
 function panelHead(key, title, sub, right = '') {
   return `
@@ -36,7 +42,7 @@ function titleCase(s) {
 // =============================================================== home =======
 
 export async function renderHome(root) {
-  root.innerHTML = loader();
+  root.innerHTML = pageLoader();
 
   // The ladder spotlight is a nice-to-have: never let it block the page.
   const [net, spot] = await Promise.all([
@@ -45,21 +51,23 @@ export async function renderHome(root) {
   ]);
 
   const n = net.network;
+  const liveModes = net.modes.filter((m) => m.status === 'active').length;
+
   const modeCard = (m) => {
     const glyph = `<div class="glyph">${icons[m.key] || icons.bolt}</div>`;
     const foot = m.headline.length
       ? `<div class="m-foot">${m.headline
-          .map((h) => `<div><div class="mv num">${compact(h.value)}</div><div class="ml">${esc(h.label)}</div></div>`)
+          .map((h) => `<div><div class="mv">${compact(h.value)}</div><div class="ml">${esc(h.label)}</div></div>`)
           .join('')}</div>`
       : '';
     if (m.status === 'soon') {
       return `
         <div class="mode-card soon reveal">
-          <div class="badge-soon"><span class="badge soon">Coming soon</span></div>
+          <div class="badge-soon"><span class="badge soon">Soon</span></div>
           ${glyph}
           <h3>${esc(m.name)}</h3>
           <div class="tag">${esc(m.tag)}</div>
-          <div class="m-foot"><div><div class="mv num">—</div><div class="ml">In the works</div></div></div>
+          <div class="m-foot"><div><div class="mv">--</div><div class="ml">Not live yet</div></div></div>
         </div>`;
     }
     const badge = m.live ? '<div class="badge-soon"><span class="badge live">Live</span></div>' : '';
@@ -73,57 +81,50 @@ export async function renderHome(root) {
       </a>`;
   };
 
-  // Three nodes pinned to the outer orbit (radius 46% of the core box).
-  const node = (deg, cls) => {
-    const rad = (deg * Math.PI) / 180;
-    const left = 50 + 46 * Math.cos(rad);
-    const top = 50 + 46 * Math.sin(rad);
-    return `<div class="node ${cls}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%;transform:translate(-50%,-50%)"><span></span></div>`;
-  };
-
   root.innerHTML = `
     <section class="hero">
       <div class="container">
         <div class="hero-grid">
           <div class="hero-copy">
-            <span class="eyebrow">Practice network · example.invalid</span>
+            <span class="eyebrow">practice network // example.invalid</span>
             <h1>
               <span class="sweep">Sharpen</span>
-              <span class="sweep spectrum-text">every mechanic.</span>
+              <span class="sweep acid">every mechanic.</span>
             </h1>
-            <p class="lede">Bridging, clutching, PvP and speed-building — every round you play on Gravijet is measured, ranked and kept. Track your progress across all five gamemodes.</p>
+            <p class="lede">Bridging, clutching, PvP and speed-building. Every round you play on Gravijet is measured, ranked and kept — across all five gamemodes.</p>
             <div class="hero-actions">
-              <a class="btn btn-primary" href="/leaderboards">View leaderboards ${icons.arrow}</a>
-              <a class="btn" href="/players">Browse players</a>
+              <a class="btn btn-primary" href="/leaderboards">Leaderboards</a>
+              <a class="btn" href="/players">Players</a>
             </div>
-            <div class="hero-tags">
-              <span class="chip">${int(n.totalPlayers)} registered</span>
-              <span class="chip">20 ranked kits</span>
-              <span class="chip">5 gamemodes</span>
+            <div class="hero-tags bar-collapse">
+              <span class="chip"><b>${int(n.totalPlayers)}</b> registered</span>
+              <span class="chip"><b>20</b> ranked kits</span>
+              <span class="chip"><b>5</b> gamemodes</span>
             </div>
           </div>
 
-          <div class="core">
-            <div class="core-glow"></div>
-            <div class="orbit o1"></div>
-            <div class="orbit o2"></div>
-            <div class="orbit o3"></div>
-            <div class="orbit-ring"></div>
-            <div class="orbit-ring rev"></div>
-            ${node(-58, 'n1')}${node(72, 'n2')}${node(196, 'n3')}
-            <div class="core-center">
-              <div class="k">Online now</div>
-              <div class="big num" id="core-online">0</div>
-              <div class="sub">peak ${int(n.peakOnline)} · ${int(n.totalPlayers)} registered</div>
+          <div class="readout reveal">
+            <div class="readout-bar"><span>System status</span><span>example.invalid</span></div>
+            <div class="readout-body">
+              <div class="readout-big">
+                <div class="v num" id="stat-online">00</div>
+                <div class="u">players<br>online <span class="cursor"></span></div>
+              </div>
+              <div class="readout-rows">
+                <div class="rr-row"><span class="k">Peak online</span><span class="v">${pad(n.peakOnline)}</span></div>
+                <div class="rr-row"><span class="k">Registered</span><span class="v">${pad(n.totalPlayers)}</span></div>
+                <div class="rr-row"><span class="k">Modes live</span><span class="v">${pad(liveModes)}</span></div>
+                <div class="rr-row"><span class="k">Total bans</span><span class="v">${pad(n.totalBans)}</span></div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="section" style="padding-top:26px">
+    <section class="section">
       <div class="container">
-        <div class="telemetry reveal">
+        <div class="telemetry grid-collapse reveal">
           <div class="cell"><div class="v">${int(n.totalPlayers)}</div><div class="l">Players</div></div>
           <div class="cell"><div class="v">${int(n.peakOnline)}</div><div class="l">Peak online</div></div>
           <div class="cell"><div class="v">${int(n.totalBans)}</div><div class="l">Bans</div></div>
@@ -133,16 +134,16 @@ export async function renderHome(root) {
       </div>
     </section>
 
-    <section class="section" style="padding-top:0">
+    <section class="section">
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Gamemodes</span>
-            <h2 style="margin-top:12px">Five ways to<br>get better.</h2>
+            <span class="eyebrow">gamemodes</span>
+            <h2>Five ways to get better.</h2>
           </div>
           <p>Every mode writes to its own ledger. Pick one and climb, or spread yourself thin — the network keeps score either way.</p>
         </div>
-        <div class="mode-grid">${net.modes.map(modeCard).join('')}</div>
+        <div class="mode-grid grid-collapse">${net.modes.map(modeCard).join('')}</div>
       </div>
     </section>
 
@@ -150,40 +151,40 @@ export async function renderHome(root) {
     ${net.onlinePlayers.length ? onlineSection(net.onlinePlayers) : ''}
   `;
 
-  const big = root.querySelector('#core-online');
-  if (big) countUp(big, n.currentOnline, { ms: 1100 });
+  const big = root.querySelector('#stat-online');
+  if (big) countUp(big, n.currentOnline, { format: (v) => pad(v), ms: 900 });
   reveal(root);
 }
 
+const GRID_SPOT = '44px 1fr 84px 84px';
+
 function spotlightSection(spot) {
   const rows = spot.entries
-    .map((e) => {
-      const rail = e.rank === 1 ? 'var(--spectrum)' : e.rank === 2 ? 'var(--cyan)' : e.rank === 3 ? 'var(--violet)' : 'transparent';
-      return `
-        <a class="board-row top${e.rank <= 3 ? e.rank : ''}" href="/player/${encodeURIComponent(e.name)}"
-           style="grid-template-columns:34px 1fr 84px 84px;--rail:${rail}">
-          <div class="rail"></div>
-          <div class="rank-badge">${e.rank}</div>
-          ${playerCell(e.uuid, e.name, e.identity.rank, e.identity.online)}
-          <div class="val primary num">${int(e.stats.wins)}</div>
-          <div class="val sec num">${int(e.stats.globalElo)}</div>
-        </a>`;
-    })
+    .map(
+      (e) => `
+      <a class="board-row ${e.rank <= 3 ? 'top' + e.rank : ''}" href="/player/${encodeURIComponent(e.name)}"
+         style="grid-template-columns:${GRID_SPOT}">
+        <div class="rank-badge">${pad(e.rank)}</div>
+        ${playerCell(e.uuid, e.name, e.identity.rank, e.identity.online)}
+        <div class="val primary">${int(e.stats.wins)}</div>
+        <div class="val sec">${int(e.stats.globalElo)}</div>
+      </a>`,
+    )
     .join('');
 
   return `
-    <section class="section" style="padding-top:0">
+    <section class="section">
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Ladder spotlight</span>
-            <h2 style="margin-top:12px">Duels — most wins</h2>
+            <span class="eyebrow">duels.wins</span>
+            <h2>Ladder spotlight</h2>
           </div>
-          <a class="btn" href="/leaderboards/practice">Full ladder ${icons.arrow}</a>
+          <a class="btn" href="/leaderboards/practice">Full ladder</a>
         </div>
         <div class="board reveal">
-          <div class="board-head" style="grid-template-columns:34px 1fr 84px 84px">
-            <span>#</span><span>Player</span><span class="r">Wins</span><span class="r">ELO</span>
+          <div class="board-head" style="grid-template-columns:${GRID_SPOT}">
+            <span>#</span><span>Player</span><span class="r">Wins</span><span class="r">Elo</span>
           </div>
           ${rows}
         </div>
@@ -196,7 +197,7 @@ function onlineSection(list) {
     .map(
       (p) => `
       <a class="dir-card reveal" href="/player/${encodeURIComponent(p.name)}">
-        <img src="${head(p.uuid, 80)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/80'">
+        <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/60'">
         <div style="min-width:0">
           <div class="dn">${esc(p.name)} <span class="online-dot"></span></div>
           <div class="dr" style="color:${p.rank.color}">${esc(p.rank.label)}</div>
@@ -205,15 +206,15 @@ function onlineSection(list) {
     )
     .join('');
   return `
-    <section class="section" style="padding-top:0">
+    <section class="section">
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Right now</span>
-            <h2 style="margin-top:12px">Online — ${list.length}</h2>
+            <span class="eyebrow">right now</span>
+            <h2>Online — ${pad(list.length)}</h2>
           </div>
         </div>
-        <div class="dir-grid">${cards}</div>
+        <div class="dir-grid grid-collapse">${cards}</div>
       </div>
     </section>`;
 }
@@ -230,31 +231,31 @@ const COLS = {
       kills: { label: 'Kills', get: (s) => s.kills, fmt: int },
       beds_destroyed: { label: 'Beds', get: (s) => s.bedsDestroyed, fmt: int },
       win_streak: { label: 'Streak', get: (s) => s.topWinStreak, fmt: int },
-      fkdr: { label: 'FKDR', get: (s) => s.fkdr, fmt: (v) => dec(v, 2) },
+      fkdr: { label: 'Fkdr', get: (s) => s.fkdr, fmt: (v) => dec(v, 2) },
     },
   },
   practice: {
     order: ['elo', 'wins', 'kills', 'winstreak'],
     defs: {
-      elo: { label: 'ELO', get: (s) => s.elo ?? s.globalElo, fmt: int },
+      elo: { label: 'Elo', get: (s) => s.elo ?? s.globalElo, fmt: int },
       wins: { label: 'Wins', get: (s) => s.wins, fmt: int },
       kills: { label: 'Kills', get: (s) => s.kills, fmt: int },
-      winstreak: { label: 'Best streak', get: (s) => s.bestWinStreak, fmt: int },
-      level: { label: 'XP', get: (s) => s.experience, fmt: compact },
+      winstreak: { label: 'Streak', get: (s) => s.bestWinStreak, fmt: int },
+      level: { label: 'Xp', get: (s) => s.experience, fmt: compact },
     },
   },
   ffa: {
     order: ['kills', 'streak', 'kd'],
     defs: {
       kills: { label: 'Kills', get: (s) => s.kills, fmt: int },
-      streak: { label: 'Best streak', get: (s) => s.bestStreak, fmt: int },
+      streak: { label: 'Streak', get: (s) => s.bestStreak, fmt: int },
       kd: { label: 'K/D', get: (s) => s.kd, fmt: (v) => dec(v, 2) },
     },
   },
   fastbuilder: {
     order: ['experience', 'coins'],
     defs: {
-      experience: { label: 'XP', get: (s) => s.experience, fmt: compact },
+      experience: { label: 'Xp', get: (s) => s.experience, fmt: compact },
       coins: { label: 'Coins', get: (s) => s.coins, fmt: compact },
     },
   },
@@ -270,14 +271,14 @@ export async function renderLeaderboards(root, mode, params) {
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Leaderboards</span>
-            <h2 style="margin-top:12px">Top of the ${MODE_LABEL[mode] === 'FFA' ? 'arena' : 'ladder'}.</h2>
+            <span class="eyebrow" id="lb-crumb">${esc(mode)}</span>
+            <h2>Leaderboards</h2>
           </div>
-          <p>Ranked from live server data. Click any row to open that player's full profile.</p>
+          <p>Ranked from live server data. Any row opens that player's full profile.</p>
         </div>
-        <div class="lb-tabs">
+        <div class="lb-tabs bar-collapse">
           ${MODE_ORDER.map((m) => `<a class="lb-tab ${m === mode ? 'active' : ''}" href="/leaderboards/${m}">${MODE_LABEL[m]}</a>`).join('')}
-          <span class="lb-tab" style="color:var(--ash-dim);cursor:default">Clutches — soon</span>
+          <span class="lb-tab dead" title="Coming soon">Clutches ~ soon</span>
         </div>
         <div id="lb-body">${loader()}</div>
       </div>
@@ -288,13 +289,19 @@ export async function renderLeaderboards(root, mode, params) {
   try {
     data = await api.leaderboard(mode, { metric, kit, limit: 100 });
   } catch {
-    body.innerHTML = `<div class="empty">This ladder is unavailable right now.</div>`;
+    body.innerHTML = `<div class="board"><div class="empty">This ladder is unavailable right now.</div></div>`;
     return;
   }
 
   const active = data.metric;
   const cfg = COLS[mode];
   const kitMode = mode === 'practice' && !!data.kit;
+
+  // The section prompt reads like a query: > duels.wins.bedfight
+  const crumb = root.querySelector('#lb-crumb');
+  if (crumb) {
+    crumb.textContent = [MODE_LABEL[mode], active, data.kit].filter(Boolean).join('.').toLowerCase();
+  }
 
   const chips = data.metrics
     .map((m) => {
@@ -316,34 +323,32 @@ export async function renderLeaderboards(root, mode, params) {
       return `/leaderboards/practice?${q}`;
     };
     kitBar = `
-      <div class="kit-select">
+      <div class="kit-select bar-collapse">
         <a class="metric-chip ${!data.kit ? 'active' : ''}" href="${link(null)}">All kits</a>
         ${data.kits.map((k) => `<a class="metric-chip ${data.kit === k.key ? 'active' : ''}" href="${link(k)}">${esc(k.label)}</a>`).join('')}
       </div>`;
   }
 
   if (!data.entries.length) {
-    body.innerHTML = `${chips ? `<div class="chips">${chips}</div>` : ''}${kitBar}
-      <div class="board" style="margin-top:16px"><div class="empty">No ranked players in this category yet — be the first.</div></div>`;
+    body.innerHTML = `${chips ? `<div class="chips bar-collapse">${chips}</div>` : ''}${kitBar}
+      <div class="board" style="margin-top:18px"><div class="empty">No ranked players in this category yet — be the first.</div></div>`;
     return;
   }
 
   // Show the active metric first, then the mode's default columns (max 4).
   const keys = [...new Set([active, ...cfg.order])].filter((k) => cfg.defs[k]).slice(0, 4);
-  const grid = `34px 1fr ${keys.map((k, i) => (i === 0 ? '104px' : '88px')).join(' ')}`;
+  const grid = `44px 1fr ${keys.map(() => '92px').join(' ')}`;
 
   const rows = data.entries
     .map((e) => {
       const src = kitMode ? e.stats.kitStat : e.stats;
-      const rail = e.rank === 1 ? 'var(--spectrum)' : e.rank === 2 ? 'var(--cyan)' : e.rank === 3 ? 'var(--violet)' : 'transparent';
       const cells = keys
-        .map((k, i) => `<div class="val ${i === 0 ? 'primary' : 'sec'} num">${cfg.defs[k].fmt(cfg.defs[k].get(src) || 0)}</div>`)
+        .map((k, i) => `<div class="val ${i === 0 ? 'primary' : 'sec'}">${cfg.defs[k].fmt(cfg.defs[k].get(src) || 0)}</div>`)
         .join('');
       return `
         <a class="board-row ${e.rank <= 3 ? 'top' + e.rank : ''}" href="/player/${encodeURIComponent(e.name)}"
-           style="grid-template-columns:${grid};--rail:${rail}">
-          <div class="rail"></div>
-          <div class="rank-badge">${e.rank}</div>
+           style="grid-template-columns:${grid}">
+          <div class="rank-badge">${pad(e.rank)}</div>
           ${playerCell(e.uuid, e.name, e.identity.rank, e.identity.online)}
           ${cells}
         </a>`;
@@ -351,9 +356,9 @@ export async function renderLeaderboards(root, mode, params) {
     .join('');
 
   body.innerHTML = `
-    ${chips ? `<div class="chips">${chips}</div>` : ''}
+    ${chips ? `<div class="chips bar-collapse">${chips}</div>` : ''}
     ${kitBar}
-    <div class="board reveal" style="margin-top:16px">
+    <div class="board reveal" style="margin-top:18px">
       <div class="board-head" style="grid-template-columns:${grid}">
         <span>#</span><span>Player</span>
         ${keys.map((k) => `<span class="r">${esc(cfg.defs[k].label)}</span>`).join('')}
@@ -366,7 +371,7 @@ export async function renderLeaderboards(root, mode, params) {
 // ============================================================== player ======
 
 export async function renderPlayer(root, name) {
-  root.innerHTML = loader();
+  root.innerHTML = pageLoader();
   let p;
   try {
     p = await api.player(name);
@@ -384,7 +389,7 @@ export async function renderPlayer(root, name) {
 
   root.innerHTML = `
     <div class="container">
-      <a class="crumb" href="/players"><span style="display:inline-flex;width:14px;transform:rotate(180deg)">${icons.arrow}</span>All players</a>
+      <a class="crumb" href="/players">All players</a>
 
       <section class="profile-hero">
         <div class="skin-wrap">
@@ -396,7 +401,7 @@ export async function renderPlayer(root, name) {
           <div class="p-status ${id.online ? 'online' : 'offline'}">
             <span class="${id.online ? 'online-dot' : 'live-dot'}"></span>${id.online ? 'Online now' : `Last seen ${timeAgo(id.lastSeen)}`}
           </div>
-          <div class="p-meta">
+          <div class="p-meta bar-collapse">
             <div class="pm"><div class="k">Playtime</div><div class="v">${playtime(id.playtime)}</div></div>
             <div class="pm"><div class="k">First seen</div><div class="v">${dateShort(id.firstSeen)}</div></div>
             <div class="pm"><div class="k">Modes played</div><div class="v">${p.summary.modesPlayed} / 4</div></div>
@@ -404,14 +409,14 @@ export async function renderPlayer(root, name) {
         </div>
       </section>
 
-      <div class="p-summary">
-        <div class="sum-tile reveal"><div class="v num" data-count="${p.summary.kills}">0</div><div class="l">Total kills</div></div>
-        <div class="sum-tile reveal"><div class="v num" data-count="${p.summary.wins}">0</div><div class="l">Total wins</div></div>
-        <div class="sum-tile reveal"><div class="v num" data-count="${p.summary.bestStreak}">0</div><div class="l">Best streak</div></div>
-        <div class="sum-tile reveal"><div class="v num">${playtime(id.playtime)}</div><div class="l">Time played</div></div>
+      <div class="p-summary grid-collapse">
+        <div class="sum-tile"><div class="v" data-count="${p.summary.kills}">0</div><div class="l">Total kills</div></div>
+        <div class="sum-tile"><div class="v" data-count="${p.summary.wins}">0</div><div class="l">Total wins</div></div>
+        <div class="sum-tile"><div class="v" data-count="${p.summary.bestStreak}">0</div><div class="l">Best streak</div></div>
+        <div class="sum-tile"><div class="v">${playtime(id.playtime)}</div><div class="l">Time played</div></div>
       </div>
 
-      <section style="padding-bottom:60px">
+      <section style="padding-bottom:50px">
         ${bedwarsPanel(m.bedwars)}
         ${practicePanel(m.practice)}
         ${ffaPanel(m.ffa)}
@@ -441,9 +446,12 @@ function bedwarsPanel(b) {
           ${stat(int(b.kills), 'Kills')}
           ${stat(int(b.deaths), 'Deaths')}
           ${stat(dec(b.kd, 2), 'K/D')}
-          ${stat(dec(b.fkdr, 2), 'FKDR')}
+          ${stat(dec(b.fkdr, 2), 'Fkdr')}
         </div>
-        <div style="margin-top:24px">${wlBar(b.wins, b.losses, 'of decided rounds')}</div>
+        <div class="block">
+          <div class="block-label">Win / loss</div>
+          ${wlBar(b.wins, b.losses, 'of decided rounds')}
+        </div>
       </div>
     </section>`;
 }
@@ -451,19 +459,19 @@ function bedwarsPanel(b) {
 function practicePanel(pr) {
   if (!pr) return emptyPanel('practice', 'Duels', 'Practice', 'No duels played yet.');
   if (!pr.games && !pr.kills) {
-    return emptyPanel('practice', 'Duels', `${esc(pr.division.label)} · ${int(pr.globalElo)} ELO`, 'No duels played yet.');
+    return emptyPanel('practice', 'Duels', `${esc(pr.division.label)} · ${int(pr.globalElo)} elo`, 'No duels played yet.');
   }
 
   const kits = pr.kits.filter((k) => k.games > 0);
   const kitGrid = kits.length
-    ? `<div class="kit-grid">${kits
+    ? `<div class="kit-grid grid-collapse">${kits
         .map((k) => {
           const pct = k.games > 0 ? (k.wins / k.games) * 100 : 0;
           return `
             <div class="kit-card">
               <div class="kc-top">
                 <div class="kc-name">${esc(k.label)}</div>
-                <div class="kc-elo num">${int(k.elo)}</div>
+                <div class="kc-elo">${int(k.elo)}</div>
               </div>
               <div class="kc-stats">
                 <div class="ks">W <b>${int(k.wins)}</b></div>
@@ -483,10 +491,10 @@ function practicePanel(pr) {
           <div class="match">
             <div class="res ${r.won ? 'w' : 'l'}"></div>
             <div class="m-info">
-              <div class="mk">${esc(titleCase(r.kit))}${r.ranked ? ' <span class="badge" style="font-size:9px;padding:2px 7px;color:var(--cyan);border-color:rgba(56,231,244,0.4)">Ranked</span>' : ''}</div>
+              <div class="mk">${esc(titleCase(r.kit))}${r.ranked ? ' <span class="badge live">Ranked</span>' : ''}</div>
               <div class="mo">vs ${
                 r.opponentUuid
-                  ? `<a href="/player/${encodeURIComponent(r.opponent)}" style="color:var(--chalk)">${esc(r.opponent)}</a>`
+                  ? `<a href="/player/${encodeURIComponent(r.opponent)}">${esc(r.opponent)}</a>`
                   : esc(r.opponent)
               }${r.arena ? ` · ${esc(r.arena)}` : ''}</div>
             </div>
@@ -505,11 +513,18 @@ function practicePanel(pr) {
         'practice',
         'Duels',
         `${int(pr.games)} matches · level ${int(pr.level)}`,
-        `<span class="badge" style="color:${pr.division.color};border-color:${pr.division.color}55">${esc(pr.division.label)}</span>`,
+        // No Minecraft colour here on purpose: the panel header is inverted, and
+        // pale division colours (Silver = #AAAAAA) vanish against it. The label
+        // carries the meaning; .panel-head .badge gives it readable contrast.
+        `<span class="badge">${esc(pr.division.label)}</span>`,
       )}
       <div class="panel-body">
         <div class="stat-row">
-          ${stat(int(pr.globalElo), 'Global ELO')}
+          <div class="stat">
+            <div class="v" style="color:${pr.division.color};font-size:15px">${esc(pr.division.label)}</div>
+            <div class="l">Division</div>
+          </div>
+          ${stat(int(pr.globalElo), 'Global elo')}
           ${stat(int(pr.wins), 'Wins', 'win')}
           ${stat(int(pr.losses), 'Losses', 'loss')}
           ${stat(int(pr.kills), 'Kills')}
@@ -518,15 +533,16 @@ function practicePanel(pr) {
           ${stat(int(pr.bestWinStreak), 'Best streak')}
           ${stat(compact(pr.coins), 'Coins')}
         </div>
-        <div style="margin-top:24px">${wlBar(pr.wins, pr.losses)}</div>
-
-        <div style="margin-top:30px">
-          <div class="eyebrow" style="margin-bottom:14px">Kits — ${kits.length} played</div>
+        <div class="block">
+          <div class="block-label">Win / loss</div>
+          ${wlBar(pr.wins, pr.losses)}
+        </div>
+        <div class="block">
+          <div class="block-label">Kits — ${kits.length} played</div>
           ${kitGrid}
         </div>
-
-        <div style="margin-top:30px">
-          <div class="eyebrow" style="margin-bottom:8px">Recent matches</div>
+        <div class="block">
+          <div class="block-label">Recent matches</div>
           ${recent}
         </div>
       </div>
@@ -537,7 +553,7 @@ function ffaPanel(f) {
   if (!f || !f.hasData) return emptyPanel('ffa', 'FFA', 'Open arena', 'No FFA fights recorded yet.');
   return `
     <section class="panel reveal">
-      ${panelHead('ffa', 'FFA', `Kill effect: ${esc(titleCase(f.killEffect.toLowerCase()))}`, `<span class="badge">${int(f.bestStreak)} best streak</span>`)}
+      ${panelHead('ffa', 'FFA', `Kill effect: ${esc(f.killEffect.toLowerCase())}`, `<span class="badge">${int(f.bestStreak)} best streak</span>`)}
       <div class="panel-body">
         <div class="stat-row">
           ${stat(int(f.kills), 'Kills')}
@@ -552,18 +568,18 @@ function ffaPanel(f) {
 function fastbuilderPanel(fb) {
   if (!fb || !fb.hasData) return emptyPanel('fastbuilder', 'FastBuilder', 'Speed-build sprints', 'No builds completed yet.');
   const maps = (fb.maps || []).length
-    ? `<div style="margin-top:28px">
-        <div class="eyebrow" style="margin-bottom:8px">Best times</div>
+    ? `<div class="block">
+        <div class="block-label">Best times</div>
         <div class="matches">${fb.maps
           .map(
             (mp) => `
             <div class="match">
-              <div class="res w" style="background:var(--spectrum)"></div>
+              <div class="res w"></div>
               <div class="m-info">
                 <div class="mk">${esc(mp.map)}</div>
                 <div class="mo">${int(mp.successes)} / ${int(mp.attempts)} completed</div>
               </div>
-              <div class="m-right"><div class="rr" style="color:var(--cyan)">${ms(mp.bestTime)}</div><div class="rd">personal best</div></div>
+              <div class="m-right"><div class="rr w">${ms(mp.bestTime)}</div><div class="rd">personal best</div></div>
             </div>`,
           )
           .join('')}</div>
@@ -589,10 +605,10 @@ function clutchesPanel() {
       <div class="soon-state">
         <div class="glyph">${icons.clutches}</div>
         <div>
-          <h4>Clutches — Coming soon</h4>
-          <p>Landing the impossible. Stats for this mode will appear here once it goes live.</p>
+          <h4>Clutches — coming soon</h4>
+          <p>Landing the impossible. Stats for this mode appear here once it goes live.</p>
         </div>
-        <div style="margin-left:auto"><span class="badge soon">Coming soon</span></div>
+        <div style="margin-left:auto"><span class="badge soon">Soon</span></div>
       </div>
     </section>`;
 }
@@ -600,7 +616,7 @@ function clutchesPanel() {
 // ========================================================== directory =======
 
 export async function renderPlayers(root) {
-  root.innerHTML = loader();
+  root.innerHTML = pageLoader();
   let list;
   try {
     list = await api.players();
@@ -613,7 +629,7 @@ export async function renderPlayers(root) {
     .map(
       (p) => `
       <a class="dir-card reveal" href="/player/${encodeURIComponent(p.name)}">
-        <img src="${head(p.uuid, 80)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/80'">
+        <img src="${head(p.uuid, 60)}" loading="lazy" alt="" onerror="this.src='https://mc-heads.net/avatar/MHF_Steve/60'">
         <div style="min-width:0">
           <div class="dn">${esc(p.name)}${p.online ? ' <span class="online-dot"></span>' : ''}</div>
           <div class="dr" style="color:${p.rank.color}">${esc(p.rank.label)}</div>
@@ -628,12 +644,12 @@ export async function renderPlayers(root) {
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Registry</span>
-            <h2 style="margin-top:12px">${list.length} players.</h2>
+            <span class="eyebrow">registry</span>
+            <h2>${list.length} players</h2>
           </div>
           <p>Everyone who has ever joined Gravijet, sorted by time on the network.</p>
         </div>
-        <div class="dir-grid">${cards || '<div class="empty">The registry is empty.</div>'}</div>
+        <div class="dir-grid grid-collapse">${cards || '<div class="empty">The registry is empty.</div>'}</div>
       </div>
     </section>`;
   reveal(root);

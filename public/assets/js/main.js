@@ -1,6 +1,5 @@
 // App shell: persistent nav (brand, links, live pill, search) + the route table.
 import { api } from './api.js';
-import { icons } from './icons.js';
 import { navigate, startRouter } from './nav.js';
 import { esc, head } from './util.js';
 import { renderHome, renderLeaderboards, renderPlayer, renderPlayers } from './views.js';
@@ -14,18 +13,17 @@ function shell() {
     <div class="container nav-inner">
       <a class="brand" href="/">
         <img src="/assets/img/logo.webp" alt="" onerror="this.style.display='none'">
-        <span class="word">GRAVIJET</span>
+        <span class="word">GRAVIJET<i>//</i>STATS</span>
       </a>
       <nav class="nav-links">
         <a href="/" data-match="/">Home</a>
-        <a href="/leaderboards" data-match="/leaderboards">Leaderboards</a>
+        <a href="/leaderboards" data-match="/leaderboards">LB</a>
         <a href="/players" data-match="/players">Players</a>
       </nav>
       <div class="nav-right">
-        <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">—</span></div>
+        <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">--</span></div>
         <div class="search">
-          ${icons.search.replace('<svg', '<svg class="search-ico"')}
-          <input class="search-input" id="q" type="text" placeholder="Find a player" autocomplete="off" spellcheck="false">
+          <input class="search-input" id="q" type="text" placeholder="find player" autocomplete="off" spellcheck="false" aria-label="Find a player">
           <div class="search-results" id="qr"></div>
         </div>
       </div>
@@ -36,9 +34,9 @@ function shell() {
       <div>
         <div class="brand">
           <img src="/assets/img/logo.webp" alt="" onerror="this.style.display='none'">
-          <span class="word">GRAVIJET</span>
+          <span class="word">GRAVIJET<i>//</i>STATS</span>
         </div>
-        <div class="f-copy" style="margin-top:10px">example.invalid · statistics</div>
+        <div class="f-copy">example.invalid &nbsp;//&nbsp; statistics</div>
       </div>
       <div class="f-links">
         <a href="/leaderboards">Leaderboards</a>
@@ -65,10 +63,10 @@ async function pollLive() {
     if (!pill || !text) return;
     const on = net.online > 0;
     pill.classList.toggle('on', on);
-    text.textContent = on ? `${net.online} online` : 'Server idle';
+    text.textContent = on ? `${String(net.online).padStart(2, '0')} online` : 'idle';
   } catch {
     const text = document.getElementById('live-text');
-    if (text) text.textContent = 'Offline';
+    if (text) text.textContent = 'offline';
   }
 }
 
@@ -175,10 +173,10 @@ async function route(path, params) {
       return await renderPlayers(app);
     }
     setTitle('Not found');
-    app.innerHTML = `<div class="notice"><h2>Lost in the well</h2><p>That page doesn't exist. <a href="/" style="color:var(--cyan)">Head back home</a>.</p></div>`;
+    app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;
   } catch (err) {
     console.error(err);
-    app.innerHTML = `<div class="notice"><h2>Something broke</h2><p>This page failed to load. Try again in a moment.</p></div>`;
+    app.innerHTML = `<div class="container"><div class="notice"><h2>Something broke</h2><p>This page failed to load. Try again in a moment.</p></div></div>`;
   }
 }
 

@@ -34,10 +34,16 @@ export function wlBar(wins, losses, label = 'win rate') {
     <div class="wl-legend"><span style="color:var(--win)">${int(wins)} W</span><span>${pct.toFixed(0)}% ${esc(label)}</span><span style="color:var(--loss)">${int(losses)} L</span></div>`;
 }
 
+// Bare on purpose: callers that paint into a page root wrap it in .container
+// themselves (see pageLoader), while in-page slots are already inside one.
 export function loader() {
   return '<div class="loader"><div class="ring"></div></div>';
 }
 
+export function pageLoader() {
+  return `<div class="container">${loader()}</div>`;
+}
+
 export function notice(title, body) {
-  return `<div class="notice"><h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
+  return `<div class="container"><div class="notice"><h2>${esc(title)}</h2><p>${esc(body)}</p></div></div>`;
 }
