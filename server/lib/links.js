@@ -83,6 +83,19 @@ async function mintCode(discordId, discordName) {
   }
 }
 
+// How many accounts are linked. Zero and "the plugin was never installed" are
+// different answers, and a console tile that cannot tell them apart is worse
+// than no tile: null says "unknown", 0 says "nobody has linked yet".
+async function count() {
+  try {
+    const rows = await sql.query('phoenix', 'SELECT COUNT(*) AS n FROM `account_links`');
+    return Number(rows[0]?.n) || 0;
+  } catch (err) {
+    if (isMissingTable(err)) return null;
+    throw err;
+  }
+}
+
 async function unlink(discordId) {
   try {
     const res = await sql.query('phoenix', 'DELETE FROM `account_links` WHERE `discord_id` = ?', [discordId]);
@@ -93,4 +106,4 @@ async function unlink(discordId) {
   }
 }
 
-module.exports = { linkFor, mintCode, unlink, NotInstalled, CODE_LENGTH, TTL_MS };
+module.exports = { linkFor, mintCode, unlink, count, NotInstalled, CODE_LENGTH, TTL_MS };

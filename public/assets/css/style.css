@@ -87,6 +87,9 @@
      looks like. Pulling the column in costs no content and gives the dirt back
      its job of framing the window. */
   --container: 1000px;
+  /* The HUD strip's own width — see .hud-inner. Wider than the menu column
+     because the header is a HUD, not a screen. */
+  --hud: 1240px;
   --gut: 16px;
 }
 
@@ -217,31 +220,108 @@ h1, h2, h3, h4 { font-weight: 700; }
 /* Opaque, not 82%: content scrolled underneath and read straight through the
    bar. A sticky header has to be a lid, not a tint. */
 .nav { position: sticky; top: 0; z-index: 50; background: #0a0a0a; border-bottom: 2px solid var(--outline); box-shadow: 0 2px 0 rgba(255, 255, 255, 0.1); }
-.nav-inner { display: flex; align-items: center; gap: 16px; height: 56px; }
+
+/* The HUD is not the menu window, and it was being made to live inside it.
+   --container is 1000px because a Minecraft *screen* is a narrow column over the
+   dirt — but the game's HUD has never obeyed that: the hotbar and the effect
+   icons span the whole display no matter how narrow the pause menu is. Forcing
+   the header into 968px of usable width meant the brand, six destinations, the
+   player count, a sign-in button and a 200px search field were fighting over
+   about 40px less than they needed, and the row simply ran out of room.
+   So the strip gets its own width. Content stays in the column. */
+.hud-inner {
+  width: 100%; max-width: var(--hud); margin: 0 auto; padding: 0 var(--gut);
+  display: flex; align-items: center; gap: 16px; height: 56px;
+}
 /* Never shrink: the nav is a flex row, and letting the brand give way clips it
    to "GRAVIJE". The search field is the one that should yield. */
 .brand { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .brand img { width: 32px; height: 32px; image-rendering: auto; } /* the logo isn't pixel art */
-.brand .word { font-size: 16px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.brand .word { font-size: 16px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; white-space: nowrap; }
 .brand .word em { font-style: normal; color: var(--mc-aqua); }
-.brand .word { white-space: nowrap; }
-.nav-links { display: flex; gap: 4px; margin-left: 8px; }
-.nav-links a { font-size: 16px; color: var(--mc-gray); padding: 4px 8px; text-shadow: 2px 2px 0 #2a2a2a; }
+
+.nav-links { display: flex; gap: 2px; min-width: 0; }
+/* The gutter is reserved on every link, not added to the active one.
+   `content: '> '` on :active-only widened whichever link was selected, so every
+   link to its right slid sideways on navigation — the row visibly jolted each
+   time you clicked it. The game's own menus don't do that: the selector arrow
+   sits in a column that is always there and is only sometimes painted. */
+.nav-links a {
+  position: relative; font-size: 16px; color: var(--mc-gray);
+  padding: 4px 7px 4px 19px; text-shadow: 2px 2px 0 #2a2a2a; white-space: nowrap;
+}
+.nav-links a::before {
+  content: '>'; position: absolute; left: 7px; color: var(--mc-yellow);
+  text-shadow: 2px 2px 0 #3f3f15; opacity: 0;
+}
 .nav-links a:hover { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+.nav-links a:hover::before { opacity: 0.45; }
 .nav-links a.active { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
-/* the game's yellow selector arrow */
-.nav-links a.active::before { content: '> '; color: var(--mc-yellow); }
-.nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.nav-links a.active::before { opacity: 1; }
+
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 
 .live-pill { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
 .live-dot { width: 8px; height: 8px; background: var(--mc-dark-gray); }
 .live-pill.on { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .live-pill.on .live-dot { background: var(--mc-green); }
 
+/* --------------------------------------------------- the other two chromes */
+/* Same grammar — bevels, hard shadows, the sixteen colours — but three
+   different screens of the game, because they are three different places.
+   The site is the HUD over the world. The player dashboard is your inventory.
+   The console is none of that: it is the debug screen, and it should never be
+   mistaken at a glance for the page that sells the server. */
+
+/* --- the player's dashboard --- */
+/* Dropped a shade below the public site: the pause menu darkens the world
+   behind it, and this is the same gesture — you have stepped out of the game
+   to look at your own things. */
+body[data-surface='player'] { background-color: #060606; }
+body[data-surface='player'] .nav { background: #0e0e0e; }
+.brand-back .word { color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+.brand-back:hover .word { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+
+/* You, in the header — the one thing this surface is about. */
+.you { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.you img { width: 24px; height: 24px; }
+.you-id { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.you-name { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; white-space: nowrap; }
+.you-rank { font-size: 16px; text-shadow: 2px 2px 0 #2a2a2a; white-space: nowrap; }
+a.you-link { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+.you-head { width: 48px; height: 48px; flex-shrink: 0; }
+
+/* --- the staff console --- */
+/* No dirt. The pause menu's dirt says "a game is running behind this"; nothing
+   is running behind this, and the texture was the single loudest thing telling
+   a moderator they were still on the marketing site. Flat ground, and a gold
+   rule under the strip instead of a white one — the console borrows the
+   colour the game uses for "pay attention to this line". */
+body[data-surface='staff'] { background: #070707; }
+body[data-surface='staff'] .nav {
+  background: #101010;
+  border-bottom: 2px solid var(--mc-gold);
+  box-shadow: 0 2px 0 rgba(255, 170, 0, 0.16);
+}
+body[data-surface='staff'] .section:nth-child(even) { background: none; }
+body[data-surface='staff'] .footer { background: rgba(0, 0, 0, 0.5); border-top: 2px solid rgba(255, 170, 0, 0.28); }
+
+.console-mark { display: flex; flex-direction: column; line-height: 1.1; flex-shrink: 0; }
+.cm-name { font-size: 16px; font-weight: 700; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; letter-spacing: 1px; }
+.cm-sub { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+body[data-surface='staff'] .nav-links a::before { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+body[data-surface='staff'] .nav-links a:hover { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+
+/* The rank you are wielding, kept next to your name on the console only. */
+.who .wt {
+  font-size: 16px; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00;
+  padding: 0 6px; border: 2px solid rgba(255, 170, 0, 0.35);
+}
+
 /* search — a sunken text field */
-.search { position: relative; }
+.search { position: relative; flex-shrink: 1; min-width: 0; }
 .search-input {
-  width: 200px; height: 32px; padding: 0 8px;
+  width: 200px; max-width: 100%; height: 32px; padding: 0 8px;
   background: #000; border: 2px solid var(--slot-lo);
   color: var(--mc-white); font: 400 16px var(--font); text-shadow: 2px 2px 0 #3f3f3f;
 }
@@ -634,25 +714,49 @@ select.fld { cursor: url('../img/crosshair.png') 16 16, crosshair; }
   .p-summary { grid-template-columns: repeat(2, 1fr); }
   .stat-row { grid-template-columns: repeat(2, 1fr); }
 }
+/* The strip gives way in the order the things on it can afford to. Between the
+   HUD's full width and a phone there is a band where it all still technically
+   fits but only just, which is what "cramped" was — so the pieces that are
+   saying the same thing twice go first, long before anything is dropped. */
+@media (max-width: 1180px) {
+  /* "3 players online" -> "3 online". The unit is obvious from the number. */
+  .lp-word { display: none; }
+  .search-input { width: 148px; }
+}
+@media (max-width: 1020px) {
+  /* The console's rank chip repeats what the tab you are on already tells you. */
+  .who .wt { display: none; }
+  .nav-links a { padding: 4px 5px 4px 17px; }
+  .nav-links a::before { left: 5px; }
+}
+@media (max-width: 860px) {
+  /* Now it genuinely does not fit. Search is the one thing with a keyboard
+     shortcut and a home on another page, so it is the one that goes. */
+  .search { display: none; }
+}
+
 @media (max-width: 620px) {
   /* The links used to be hidden here, which left a phone with no navigation at
      all — survivable with three of them and the footer as a backstop, not with
      six. They drop to their own row instead and scroll sideways if they must. */
-  .nav-inner { flex-wrap: wrap; row-gap: 8px; }
+  .hud-inner { flex-wrap: wrap; row-gap: 8px; height: auto; padding-top: 8px; padding-bottom: 8px; gap: 10px; }
   .nav-links {
     order: 3; width: 100%; margin-left: 0; gap: 2px;
     overflow-x: auto; scrollbar-width: none;
   }
   .nav-links::-webkit-scrollbar { display: none; }
-  .nav-links a { padding: 4px 6px; white-space: nowrap; }
+  .nav-links a { padding: 4px 6px 4px 18px; white-space: nowrap; }
+  .nav-links a::before { left: 6px; }
   /* brand + live count + search will not fit on one line at 390px; the count
      is already on the home page, so the nav keeps brand and search. */
   .live-pill { display: none; }
   /* "GRAVIJET STATS" wraps at this width; the suffix is the part to lose. */
   .brand .word em { display: none; }
-  .nav-inner { gap: 10px; }
+  .search { display: flex; flex: 1; min-width: 0; }
   .search-input { width: 100%; min-width: 0; }
-  .search { flex: 1; min-width: 0; }
+  /* Your name is the least useful thing in a 390px header — the avatar and the
+     doors out of here are what get used. */
+  .who .wn { display: none; }
   .telemetry, .p-summary { grid-template-columns: 1fr; }
   /* The row can't hold four things side by side this narrow: the numbers go
      under the name, and the blurb goes — the name and its stats are the point. */
@@ -689,3 +793,47 @@ select.fld { cursor: url('../img/crosshair.png') 16 16, crosshair; }
 .lc-steps { margin: 12px 0 0; padding-left: 22px; color: var(--mc-gray); font-size: 16px; line-height: 1.7; text-shadow: 2px 2px 0 #2a2a2a; }
 .lc-steps b { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .lc-ttl { margin-top: 8px; font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+
+/* -------------------------------------------------------------- dashboards */
+/* Shared by both dashboards: the same widgets, on two different grounds. */
+
+/* A count and what it counts. The Statistics screen's own shape — the number
+   first and large, the label under it in grey — rather than a card with a
+   border, which is a thing this game does not have. */
+.ptiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 14px; }
+.ptiles-4 { grid-template-columns: repeat(4, 1fr); }
+.ptile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; }
+a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
+.pt-n { font-size: 24px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.pt-l { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+
+/* Something that needs attention but is not an error: the colour the game uses
+   on a low-health heart, not the one it uses on a crash. */
+.pwarn {
+  margin-top: 12px; padding: 10px 12px; font-size: 16px;
+  color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00;
+  background: rgba(255, 170, 0, 0.09); border: 2px solid rgba(255, 170, 0, 0.3);
+}
+.pwarn a { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; text-decoration: underline; }
+
+/* --- the console's queue --- */
+.qrow { align-items: center; }
+.glyph-sm { width: 20px; height: 20px; flex-shrink: 0; }
+.glyph-sm svg { width: 20px; height: 20px; }
+/* Old enough that somebody should have dealt with it by now. Stated in the
+   colour, so a full queue can be triaged without reading a single line of it. */
+.dr.stale { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+
+/* --- alts --- */
+.altrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.alt {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
+  font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f;
+  background: var(--entry); border: 2px solid rgba(255, 255, 255, 0.09);
+}
+.alt:hover { border-color: var(--mc-white); }
+.alt img { width: 20px; height: 20px; }
+
+@media (max-width: 900px) {
+  .ptiles, .ptiles-4 { grid-template-columns: repeat(2, 1fr); }
+}

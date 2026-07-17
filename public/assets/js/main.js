@@ -1,88 +1,21 @@
-// App shell: persistent nav (brand, links, live pill, search) + the route table.
-import { api } from './api.js';
-
-// Same reason as sound.js: follow the versioned directory this module came from.
-const LOGO = new URL('../img/logo.webp', import.meta.url).href;
-
-// The vanity code `gravijet` is not registered — discord.gg/gravijet answers
-// "Unknown Invite", so the footer link was dead. This is the invite the old
-// landing page redirected to, and it resolves to "example.invalid - Minecraft
-// server". Swap it back if the vanity URL is ever bought.
-const DISCORD = 'https://discord.gg/xyrNc8AAH6';
+// App shell entry: picks the chrome for the surface, then routes.
+//
+// The chrome itself lives in shell.js — the three surfaces (site, player,
+// staff) do not share a header, so choosing one is a routing decision.
 import { navigate, startRouter } from './nav.js';
 import { sound } from './sound.js';
 import { esc, head } from './util.js';
+import { api } from './api.js';
+import { mountShell, surfaceFor, markActive, paintWho, pollLive, IS_DASH_HOST } from './shell.js';
 import {
   renderHome, renderLeaderboards, renderPlayer, renderPlayers,
   renderStaff, renderMedia, renderRules,
 } from './views.js';
-import { renderApply, renderReport, renderAppeal, renderLink } from './forms.js';
-import { renderDashboard } from './dash.js';
-
-// example.invalid is the same app behind the same session; the host only
-// decides which front door you came through. Everything under /dashboard checks
-// the rank server-side regardless of where it is asked from.
-const IS_DASH_HOST = location.hostname.startsWith('spielplatz.');
+import { renderApply, renderReport, renderAppeal } from './forms.js';
+import { renderPlayerDash } from './dash-player.js';
+import { renderStaffDash } from './dash-staff.js';
 
 const app = document.getElementById('app');
-
-// ------------------------------------------------------------------- shell
-
-function shell() {
-  document.getElementById('nav').innerHTML = `
-    <div class="container nav-inner">
-      <a class="brand" href="/">
-        <img src="${LOGO}" alt="" onerror="this.style.display='none'">
-        <span class="word">GRAVIJET <em>STATS</em></span>
-      </a>
-      <nav class="nav-links">
-        <a href="/" data-match="/">Home</a>
-        <a href="/leaderboards" data-match="/leaderboards">LB</a>
-        <a href="/players" data-match="/players">Players</a>
-        <a href="/staff" data-match="/staff">Staff</a>
-        <a href="/media" data-match="/media">Media</a>
-        <a href="/rules" data-match="/rules">Rules</a>
-      </nav>
-      <div class="nav-right">
-        <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">--</span></div>
-        <div id="who"></div>
-        <div class="search">
-          <input class="search-input" id="q" type="text" placeholder="find player" autocomplete="off" spellcheck="false" aria-label="Find a player">
-          <div class="search-results" id="qr"></div>
-        </div>
-      </div>
-    </div>`;
-
-  document.getElementById('footer').innerHTML = `
-    <div class="container footer-inner">
-      <div>
-        <div class="brand">
-          <img src="${LOGO}" alt="" onerror="this.style.display='none'">
-          <span class="word">GRAVIJET <em>STATS</em></span>
-        </div>
-        <div class="f-copy">example.invalid</div>
-      </div>
-      <div class="f-links">
-        <a href="/leaderboards">Leaderboards</a>
-        <a href="/players">Players</a>
-        <a href="/staff">Staff</a>
-        <a href="/media">Media</a>
-        <a href="/rules">Rules</a>
-        <a href="/apply">Apply</a>
-        <a href="/report">Report</a>
-        <a href="/appeal">Appeal</a>
-        <a href="/link">Link account</a>
-        <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
-      </div>
-    </div>`;
-}
-
-function markActive(path) {
-  const base = '/' + (path.split('/')[1] || '');
-  document.querySelectorAll('.nav-links a').forEach((a) => {
-    a.classList.toggle('active', a.dataset.match === base || (base === '/player' && a.dataset.match === '/players'));
-  });
-}
 
 // --------------------------------------------------------------- sound
 // The game plays its click when you push a button down, not when you let go, so
@@ -103,71 +36,27 @@ function wireSound() {
   });
 }
 
-// ------------------------------------------------------------------- who
-
-// Painted after the shell rather than inside it: the shell must not wait on a
-// round trip, and a nav that renders 200ms late is worse than one that fills in.
-async function paintWho() {
-  const box = document.getElementById('who');
-  if (!box) return;
-  let me;
-  try {
-    me = await api.me();
-  } catch {
-    return; // signed-out is the safe assumption, and the button below says so
-  }
-  if (!me.user) {
-    box.innerHTML = me.loginConfigured
-      ? `<a class="btn who-btn" href="/auth/discord?return=${encodeURIComponent(location.pathname)}" data-ext>Sign in</a>`
-      : '';
-    return;
-  }
-  const u = me.user;
-  box.innerHTML = `
-    <div class="who">
-      ${u.discord.avatar ? `<img src="${u.discord.avatar}" alt="" width="20" height="20">` : ''}
-      <span class="wn">${esc(u.discord.name)}</span>
-      ${u.staff ? `<a class="wd" href="${IS_DASH_HOST ? '/' : 'https://example.invalid/'}" ${IS_DASH_HOST ? '' : 'data-ext'}>Dashboard</a>` : ''}
-      <button class="wo" id="logout" title="Sign out">×</button>
-    </div>`;
-  const out = document.getElementById('logout');
-  if (out) {
-    out.addEventListener('click', async () => {
-      await api.logout().catch(() => {});
-      location.reload();
-    });
-  }
-}
-
-// ------------------------------------------------------- live status pill
-
-async function pollLive() {
-  try {
-    const net = await api.network();
-    const pill = document.getElementById('live-pill');
-    const text = document.getElementById('live-text');
-    if (!pill || !text) return;
-    const on = net.online > 0;
-    pill.classList.toggle('on', on);
-    text.textContent = on ? `${String(net.online).padStart(2, '0')} online` : 'idle';
-  } catch {
-    const text = document.getElementById('live-text');
-    if (text) text.textContent = 'offline';
-  }
-}
-
 // --------------------------------------------------------------- search
+// Wired to the document rather than to the input: the site chrome is mounted and
+// torn down as you move between surfaces, so binding the element itself would
+// leave the listeners on a node nobody can see any more.
 
 function wireSearch() {
-  const input = document.getElementById('q');
-  const out = document.getElementById('qr');
   let timer = null;
   let items = [];
   let sel = -1;
 
-  const close = () => { out.innerHTML = ''; items = []; sel = -1; };
+  const els = () => ({ input: document.getElementById('q'), out: document.getElementById('qr') });
+  const close = () => {
+    const { out } = els();
+    if (out) out.innerHTML = '';
+    items = [];
+    sel = -1;
+  };
 
   const paint = () => {
+    const { out } = els();
+    if (!out) return;
     out.innerHTML = items
       .map(
         (p, i) => `
@@ -180,9 +69,10 @@ function wireSearch() {
       .join('');
   };
 
-  input.addEventListener('input', () => {
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'q') return;
     clearTimeout(timer);
-    const q = input.value.trim();
+    const q = e.target.value.trim();
     if (!q) return close();
     timer = setTimeout(async () => {
       try {
@@ -193,7 +83,17 @@ function wireSearch() {
     }, 140);
   });
 
-  input.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', (e) => {
+    const { input } = els();
+    if (!input) return;
+
+    // "/" focuses search from anywhere.
+    if (e.key === '/' && document.activeElement !== input && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+      e.preventDefault();
+      return input.focus();
+    }
+    if (e.target !== input) return;
+
     if (e.key === 'Escape') { input.blur(); return close(); }
     if (!items.length) {
       // Enter with no suggestions still jumps straight to the typed name.
@@ -217,15 +117,13 @@ function wireSearch() {
   });
 
   // Clicking a suggestion is handled by the router's link interception; just tidy up.
-  out.addEventListener('click', () => { input.value = ''; close(); });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.search')) close(); });
-
-  // "/" focuses search from anywhere.
-  document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && document.activeElement !== input && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
-      e.preventDefault();
-      input.focus();
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#qr')) {
+      const { input } = els();
+      if (input) input.value = '';
+      return close();
     }
+    if (!e.target.closest('.search')) close();
   });
 }
 
@@ -236,24 +134,34 @@ function setTitle(t) {
 }
 
 async function route(path, params) {
+  const surface = surfaceFor(path);
+  // A fresh chrome has a fresh #who and a fresh pill, so both are repainted.
+  if (mountShell(surface)) {
+    paintWho();
+    pollLive();
+  }
   markActive(path);
+
   const seg = path.split('/').filter(Boolean);
 
   try {
+    // The console has one job, so its root is the dashboard rather than a copy
+    // of the public home page, and every path under it is a console tab.
+    if (surface === 'staff') {
+      setTitle('Staff console');
+      return await renderStaffDash(app, seg[0] || '');
+    }
+    if (seg[0] === 'dashboard') {
+      setTitle('Your dashboard');
+      return await renderPlayerDash(app, seg[1] || '');
+    }
     if (seg.length === 0) {
-      // The dashboard host has one job, so its root is the dashboard rather than
-      // a copy of the public home page.
-      if (IS_DASH_HOST) {
-        setTitle('Dashboard');
-        return await renderDashboard(app, null);
-      }
       setTitle('');
       return await renderHome(app);
     }
     if (seg[0] === 'leaderboards') {
-      const mode = seg[1] || 'practice';
       setTitle('Leaderboards');
-      return await renderLeaderboards(app, mode, params);
+      return await renderLeaderboards(app, seg[1] || 'practice', params);
     }
     if (seg[0] === 'player' && seg[1]) {
       const name = decodeURIComponent(seg[1]);
@@ -284,17 +192,9 @@ async function route(path, params) {
       setTitle('Report a player');
       return await renderReport(app);
     }
-    if (seg[0] === 'link') {
-      setTitle('Link your account');
-      return await renderLink(app);
-    }
     if (seg[0] === 'appeal') {
       setTitle('Appeal');
       return await renderAppeal(app);
-    }
-    if (seg[0] === 'dashboard') {
-      setTitle('Dashboard');
-      return await renderDashboard(app, seg[1] || null);
     }
     setTitle('Not found');
     app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;
@@ -304,10 +204,8 @@ async function route(path, params) {
   }
 }
 
-shell();
 wireSound();
 wireSearch();
 startRouter(route);
-paintWho();
-pollLive();
+// Only the site chrome carries a pill; pollLive returns immediately elsewhere.
 setInterval(pollLive, 30000);

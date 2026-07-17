@@ -43,6 +43,7 @@ const phoenix = {
   grants: () => collection(config.mongo.phoenixDb, 'px-grants'),
   profiles: () => collection(config.mongo.phoenixDb, 'px-profiles'),
   punishments: () => collection(config.mongo.phoenixDb, 'punishments'),
+  logins: () => collection(config.mongo.phoenixDb, 'px-logins'),
   reports: () => collection(config.mongo.phoenixDb, 'px-reports'),
   reportCategories: () => collection(config.mongo.phoenixDb, 'px-report-categories'),
   punishmentLadders: () => collection(config.mongo.phoenixDb, 'px-punishmentLadders'),
@@ -53,7 +54,8 @@ const site = {
   applications: () => collection(config.mongo.siteDb, 'applications'),
   reports: () => collection(config.mongo.siteDb, 'reports'),
   appeals: () => collection(config.mongo.siteDb, 'appeals'),
-  links: () => collection(config.mongo.siteDb, 'links'),
+  // Account links are deliberately NOT here: the MoreFeatures plugin owns that
+  // table and speaks MySQL, so they live in `phoenixbridge`. See lib/links.
   hidden: () => collection(config.mongo.siteDb, 'hidden'),
   audit: () => collection(config.mongo.siteDb, 'audit'),
 };

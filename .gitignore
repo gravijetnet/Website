@@ -137,3 +137,8 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# The source clip the click was cut from. It lives here so the conversion can be
+# redone, but it is an input, not something the site serves — public/assets/sfx
+# holds the .wav that actually ships.
+minecraft_click.mp3

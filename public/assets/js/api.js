@@ -43,6 +43,15 @@ export const api = {
   applySubmit: (role, answers) => send(`/apply/${encodeURIComponent(role)}`, 'POST', { answers }),
   myApplications: () => get('/my/applications'),
 
+  // The signed-in player's own paperwork.
+  my: {
+    summary: () => get('/my/summary'),
+    reports: () => get('/my/reports'),
+    appeals: () => get('/my/appeals'),
+    punishments: () => get('/my/punishments'),
+    logins: () => get('/my/logins'),
+  },
+
   linkStatus: () => get('/link'),
   linkCode: () => send('/link/code', 'POST'),
   unlink: () => send('/link', 'DELETE'),
@@ -53,6 +62,9 @@ export const api = {
 
   dash: {
     summary: () => get('/dash/summary'),
+    queue: () => get('/dash/queue'),
+    stats: () => get('/dash/stats'),
+    player: (name) => get(`/dash/player/${encodeURIComponent(name)}`),
     applications: (status) => get(`/dash/applications${status ? `?status=${status}` : ''}`),
     reviewApplication: (id, decision, note) => send(`/dash/applications/${id}`, 'POST', { decision, note }),
     reports: (status) => get(`/dash/reports${status ? `?status=${status}` : ''}`),

@@ -112,12 +112,25 @@ function group(list) {
     .sort((a, b) => b.rank.priority - a.rank.priority);
 }
 
-// The team, grouped by rank. Every staff rank outranks every non-staff one
-// (Helper is 300, Builder 210), so a player's highest rank being staff and their
-// holding any staff rank are the same thing — no need to ask twice.
+// Ranks that belong on the team page without carrying Phoenix's `staff` flag.
+// Builders and testers are not moderators — they hold no powers over anyone, so
+// the core is right to leave the flag off — but they are on the team, and the
+// page answers "who works on this network", not "who can ban you".
+const TEAM_EXTRA = new Set(['builder', 'tester']);
+
+function onTeam(rank) {
+  return rank.staff || TEAM_EXTRA.has(rank.name.toLowerCase());
+}
+
+// The team, grouped by rank.
+//
+// Keyed on a player's highest rank rather than on any team rank they hold, which
+// works because the ladder is built so the team sits on top of it: Tester (200)
+// outranks Partner (140) and everything below. Somebody holding Admin and
+// Builder is shown once, as an Admin, which is what they are.
 async function staff() {
   const list = await withPresence(await roster());
-  return group(oneEntryPerName(list.filter((p) => p.top.staff && p.top.visible)));
+  return group(oneEntryPerName(list.filter((p) => onTeam(p.top) && p.top.visible)));
 }
 
 // Holders of a named rank, whatever else they hold. Someone with both Media and

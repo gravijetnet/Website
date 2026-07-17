@@ -29,6 +29,7 @@ api.use(require('./routes/skin'));
 api.use(require('./routes/team'));
 api.use(require('./routes/rules'));
 api.use(require('./routes/me'));
+api.use(require('./routes/my'));
 api.use(require('./routes/apply'));
 api.use(require('./routes/link'));
 api.use(require('./routes/report'));

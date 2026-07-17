@@ -6,7 +6,10 @@ const router = express.Router();
 const mongo = require('../lib/mongo');
 const staff = require('../lib/staff');
 const playersLib = require('../lib/players');
-const { invalidate } = require('../lib/cache');
+const phoenix = require('../lib/phoenix');
+const links = require('../lib/links');
+const punishments = require('../lib/punishments');
+const { invalidate, cached } = require('../lib/cache');
 
 // The staff dashboard's API. Everything here is website-side by design: no ban,
 // kick or mute. Phoenix holds punishments in memory and syncs them over Redis,
@@ -46,16 +49,110 @@ async function audit(req, action, subject, extra = {}) {
 
 router.get('/dash/summary', staff.requires('viewReports'), async (req, res) => {
   try {
-    const [apps, reports, appeals, hidden] = await Promise.all([
+    const [apps, reports, appeals, hiddenCount] = await Promise.all([
       (await mongo.site.applications()).countDocuments({ status: 'pending' }),
       (await mongo.site.reports()).countDocuments({ status: 'open' }),
       (await mongo.site.appeals()).countDocuments({ status: 'open' }),
       (await mongo.site.hidden()).countDocuments({}),
     ]);
-    res.json({ you: { ranks: req.staff.ranks, tier: req.staff.tier, can: req.staff.abilities }, pending: { applications: apps, reports, appeals, hidden } });
+    res.json({
+      you: { ranks: req.staff.ranks, tier: req.staff.tier, can: req.staff.abilities },
+      pending: { applications: apps, reports, appeals, hidden: hiddenCount },
+    });
   } catch (err) {
     console.error('[dash summary]', err);
     res.status(500).json({ error: 'summary_unavailable' });
+  }
+});
+
+// The queue: everything waiting on a human, oldest first, in one list.
+//
+// The tabs answer "show me the reports"; this answers the question staff
+// actually arrive with, which is "what should I do now". Sorting by age across
+// all three types is the point — an appeal that has sat for a week outranks a
+// report filed this morning, and no per-tab view can show you that.
+router.get('/dash/queue', staff.requires('viewReports'), async (req, res) => {
+  const can = req.staff.abilities;
+  try {
+    const [apps, reports, appeals] = await Promise.all([
+      can.viewApplications
+        ? (await mongo.site.applications()).find({ status: 'pending' }).sort({ submittedAt: 1 }).limit(50).toArray()
+        : [],
+      (await mongo.site.reports()).find({ status: 'open' }).sort({ filedAt: 1 }).limit(50).toArray(),
+      can.viewAppeals
+        ? (await mongo.site.appeals()).find({ status: 'open' }).sort({ filedAt: 1 }).limit(50).toArray()
+        : [],
+    ]);
+
+    const items = [
+      ...apps.map((a) => ({
+        kind: 'application',
+        id: a._id,
+        at: a.submittedAt,
+        title: `${a.roleLabel} — ${a.discordName}`,
+        detail: null,
+        href: '/applications',
+      })),
+      ...reports.map((r) => ({
+        kind: 'report',
+        id: r._id,
+        at: r.filedAt,
+        title: `${r.target?.name || 'unknown'} — ${r.categoryLabel}`,
+        detail: r.detail,
+        href: '/reports',
+      })),
+      ...appeals.map((a) => ({
+        kind: 'appeal',
+        id: a._id,
+        at: a.filedAt,
+        title: `${a.target?.name || a.punishmentId} — ${a.punishment?.type || 'punishment'}`,
+        detail: a.reason,
+        href: '/appeals',
+      })),
+    ].sort((a, b) => (a.at || 0) - (b.at || 0));
+
+    res.json({ items });
+  } catch (err) {
+    console.error('[dash queue]', err);
+    res.status(500).json({ error: 'queue_unavailable' });
+  }
+});
+
+// Numbers about the network itself, for the console's landing page. Cached: this
+// counts whole collections and is refreshed by staff hitting F5, not by anything
+// that needs to be true to the second.
+async function networkStats() {
+  const [roster, punishmentTotal, live, linkCount, reports, appeals, apps] = await Promise.all([
+    cached('roster', 60000, phoenix.roster).catch(() => []),
+    (await mongo.phoenix.punishments()).countDocuments({}).catch(() => 0),
+    // Not `active: true`: that counts every kick ever handed out, and would have
+    // told the console eight people were restricted when the real number was
+    // one. See lib/punishments.
+    punishments.countLive(await mongo.phoenix.punishments()).catch(() => 0),
+    links.count().catch(() => null),
+    (await mongo.site.reports()).countDocuments({}).catch(() => 0),
+    (await mongo.site.appeals()).countDocuments({}).catch(() => 0),
+    (await mongo.site.applications()).countDocuments({}).catch(() => 0),
+  ]);
+
+  return {
+    ranked: roster.length,
+    staff: roster.filter((p) => p.top?.staff).length,
+    punishments: punishmentTotal,
+    activePunishments: live,
+    links: linkCount,
+    reports,
+    appeals,
+    applications: apps,
+  };
+}
+
+router.get('/dash/stats', staff.requires('viewReports'), async (req, res) => {
+  try {
+    res.json(await cached('dash:stats', 30000, networkStats));
+  } catch (err) {
+    console.error('[dash stats]', err);
+    res.status(500).json({ error: 'stats_unavailable' });
   }
 });
 
@@ -187,6 +284,64 @@ router.post('/dash/appeals/:id', staff.requires('resolveAppeals'), json, async (
   }
 });
 
+// --- looking a player up ---------------------------------------------------
+
+// Everything the network knows about one player, in one answer: who they are,
+// what they hold, what they have been punished for, who they also play as, and
+// whether the website is hiding them.
+//
+// This is the tool a report is actually worked with. Without it, judging "is
+// this their first offence" meant asking someone in game.
+router.get('/dash/player/:name', staff.requires('viewPlayers'), async (req, res) => {
+  try {
+    const identity = await playersLib.byName(req.params.name);
+    if (!identity) return res.status(404).json({ error: 'unknown_player' });
+
+    const [roster, punishmentRows, profile, logins, isHidden] = await Promise.all([
+      cached('roster', 60000, phoenix.roster).catch(() => []),
+      (await mongo.phoenix.punishments()).find({ target: identity.uuid }).toArray().catch(() => []),
+      (await mongo.phoenix.profiles()).findOne({ _id: identity.uuid }).catch(() => null),
+      (await mongo.phoenix.logins()).find({ target: identity.uuid }).toArray().catch(() => []),
+      (await mongo.site.hidden()).findOne({ _id: identity.uuid }).catch(() => null),
+    ]);
+
+    const entry = roster.find((p) => p.uuid === identity.uuid);
+
+    // Alts are the core's own conclusion (it matches on the hashed IP), so this
+    // reports them rather than working them out again — and resolves the UUIDs
+    // to names, which is the only reason the list is worth showing.
+    const altUuids = Array.isArray(profile?.alts) ? profile.alts : [];
+    const altNames = altUuids.length
+      ? await (await mongo.phoenix.profiles())
+          .find({ _id: { $in: altUuids } }, { projection: { name: 1 } })
+          .toArray()
+          .catch(() => [])
+      : [];
+
+    const now = Date.now();
+    res.json({
+      uuid: identity.uuid,
+      name: identity.name,
+      online: !!identity.online,
+      playtime: identity.playtime || 0,
+      lastSeen: identity.lastSeen || null,
+      ranks: entry ? entry.ranks.map((r) => ({ name: r.name, color: r.color, staff: r.staff })) : [],
+      hidden: isHidden ? { reason: isHidden.reason, at: isHidden.at, by: isHidden.by?.name || null } : null,
+      alts: altNames.map((a) => ({ uuid: a._id, name: a.name })),
+      sessions: logins.length,
+      firstSeen: logins.length ? Math.min(...logins.map((l) => Number(l.login) || now)) : null,
+      // Staff see shadow punishments — hiding them from the people who apply
+      // them would defeat the point of having them.
+      punishments: punishmentRows
+        .map((p) => punishments.shape(p, now))
+        .sort((a, b) => b.issuedAt - a.issuedAt),
+    });
+  } catch (err) {
+    console.error('[dash player]', err);
+    res.status(500).json({ error: 'player_unavailable' });
+  }
+});
+
 // --- hiding players --------------------------------------------------------
 
 router.get('/dash/hidden', staff.requires('hidePlayers'), async (req, res) => {
@@ -244,9 +399,27 @@ router.delete('/dash/hidden/:uuid', staff.requires('hidePlayers'), async (req, r
 
 // --- audit -----------------------------------------------------------------
 
-router.get('/dash/audit', staff.requires('reviewApplications'), async (req, res) => {
+// Readable by any staff, not just the people who can act.
+//
+// It used to need reviewApplications, which meant the log of what staff do to
+// players was visible only to the rank most able to do it. An audit trail the
+// audited cannot read is not much of a check on anything; the whole point is
+// that a helper can see an admin's decisions.
+router.get('/dash/audit', staff.requires('viewReports'), async (req, res) => {
+  const by = String(req.query.by || '').trim();
+  const action = String(req.query.action || '').trim();
+  const q = {};
+  if (by) q['by.id'] = by;
+  // Prefix match, so `application` covers accepted and rejected both. Escaped:
+  // a query string must not be able to hand us a regular expression.
+  if (action) q.action = new RegExp('^' + action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   try {
-    res.json(await (await mongo.site.audit()).find({}).sort({ at: -1 }).limit(100).toArray());
+    const list = await (await mongo.site.audit())
+      .find(q)
+      .sort({ at: -1 })
+      .limit(200)
+      .toArray();
+    res.json(list);
   } catch (err) {
     console.error('[dash audit]', err);
     res.status(500).json({ error: 'audit_unavailable' });

@@ -32,6 +32,11 @@ const TIER = {
 const NEEDS = {
   viewReports: 1,
   viewAppeals: 1,
+  // Looking a player up is the first thing anybody does with a report, so it
+  // sits with reading one. It shows what the core already shows in game to
+  // anyone who can run /history — the website is not the place that decides
+  // whether a helper may know why someone was banned.
+  viewPlayers: 1,
   viewApplications: 2,
   resolveReports: 3,
   resolveAppeals: 3,

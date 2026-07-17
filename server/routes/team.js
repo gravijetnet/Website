@@ -6,10 +6,12 @@ const router = express.Router();
 const { cached } = require('../lib/cache');
 const phoenix = require('../lib/phoenix');
 
-// Ranks that make someone media rather than staff. Media is the rank the network
-// actually grants; the others sit beside it in the same band of the ladder and
-// mean the same kind of thing to a visitor looking for content about the server.
-const MEDIA_RANKS = ['Media', 'Creator', 'Partner', 'Famous'];
+// The media band of the ladder, highest first. The page does not order by this
+// list — grouping sorts on each rank's own priority, and Phoenix already spaces
+// them Partner 140, Famous 120, Media 110, Creator 100 — but the two agree, and
+// writing it in the order it renders means a reader can check that at a glance
+// instead of going to look the numbers up.
+const MEDIA_RANKS = ['Partner', 'Famous', 'Media', 'Creator'];
 
 function slim(groups) {
   return groups.map((g) => ({
