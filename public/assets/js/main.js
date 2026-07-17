@@ -176,7 +176,7 @@ async function route(path, params) {
     // The console has one job, so its root is the dashboard rather than a copy
     // of the public home page, and every path under it is a console tab.
     if (surface === 'staff') {
-      setTitle('Staff console');
+      setTitle('Spielplatz');
       return await renderStaffDash(app, seg[0] || '');
     }
     if (seg[0] === 'dashboard') {

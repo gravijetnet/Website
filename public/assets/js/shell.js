@@ -194,7 +194,7 @@ function staffChrome() {
     <div class="hud-inner">
       <a class="console-mark" href="${SITE || 'https://example.invalid'}/" ${SITE ? 'data-ext' : ''} title="Back to example.invalid">
         <span class="cm-name">SPIELPLATZ</span>
-        <span class="cm-sub">staff console</span>
+        <span class="cm-sub">staff dashboard</span>
       </a>
       <nav class="nav-links" id="stabs"></nav>
       <div class="nav-right">
