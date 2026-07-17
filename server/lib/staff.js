@@ -26,9 +26,8 @@ const TIER = {
   Management: 5,
 };
 
-// What each tier may do. Read is broad, write is narrow, and the two things that
-// change what players see — hiding someone, ruling on an application — sit
-// highest.
+// What each tier may do. Read is broad, write is narrow, and everything that
+// reaches into the game or decides what other staff may do sits at Admin.
 const NEEDS = {
   viewReports: 1,
   viewAppeals: 1,
@@ -38,12 +37,42 @@ const NEEDS = {
   // whether a helper may know why someone was banned.
   viewPlayers: 1,
   viewApplications: 2,
+  // Mute, kick and a temporary ban: the things a moderator does during a shift.
+  punishPlayers: 2,
   resolveReports: 3,
   resolveAppeals: 3,
   hidePlayers: 3,
+  // Permanent bans and blacklists. Separated from punishPlayers because "this
+  // person is done here" is a different decision from "cool off for an hour",
+  // and it is the one nobody should be able to make by mis-clicking a dropdown.
+  banPlayers: 3,
   reviewApplications: 4,
   manageStats: 4,
+  // Admin and above, per the owner: the rulebook, the ladder of ranks, and who
+  // is allowed to touch what.
+  manageRules: 4,
+  manageRanks: 4,
+  manageAccess: 4,
 };
+
+// Shown in the Access editor, in the order they are worth reading. A bare key
+// like `hidePlayers` is not something to hand somebody and expect them to judge.
+const ABILITY_INFO = [
+  { key: 'viewReports', label: 'Read reports', note: 'And the audit log.' },
+  { key: 'viewAppeals', label: 'Read appeals', note: null },
+  { key: 'viewPlayers', label: 'Look players up', note: 'Ranks, alts, punishment history, sessions.' },
+  { key: 'viewApplications', label: 'Read applications', note: null },
+  { key: 'punishPlayers', label: 'Mute, kick, tempban', note: 'Takes effect in game immediately.' },
+  { key: 'resolveReports', label: 'Close reports', note: null },
+  { key: 'resolveAppeals', label: 'Rule on appeals', note: null },
+  { key: 'hidePlayers', label: 'Hide players', note: 'Website only — removes them from leaderboards.' },
+  { key: 'banPlayers', label: 'Ban permanently, blacklist', note: 'Takes effect in game immediately.' },
+  { key: 'reviewApplications', label: 'Accept or reject applications', note: null },
+  { key: 'manageStats', label: 'Manage stats', note: null },
+  { key: 'manageRules', label: 'Edit the rules', note: 'Changes what example.invalid/rules says.' },
+  { key: 'manageRanks', label: 'Promote and demote', note: 'Grants and revokes ranks in game and in Discord.' },
+  { key: 'manageAccess', label: 'Change who can do what', note: 'This page. Hand it out carefully.' },
+];
 
 // Role ids -> rank names we know. An unknown role id is simply not a rank.
 function ranksFromRoles(roleIds) {
@@ -112,14 +141,58 @@ async function fetchRoles(accessToken) {
   }
 }
 
-// Everything the caller is, resolved from their current Discord roles.
+// --------------------------------------------------------------- overrides
+
+// The tier ladder decides what a rank may do, and that is the right default —
+// but it is a ladder, and real teams have exceptions on it: the developer who
+// needs to read applications without being handed the power to accept them, the
+// helper trusted with appeals, the admin whose hands you want off the rules
+// while an argument is being had. Encoding each of those as a new tier would end
+// with a tier per person.
+//
+// So: per-person grants and denials on top of the ladder, editable from
+// Spielplatz by Admin and above. The ladder still decides for everybody who has
+// no override, which is almost everybody.
+//
+// Two rules keep this from being a way to seize the network, both enforced in
+// routes/access.js rather than here: you cannot override somebody whose tier is
+// at or above your own, and you cannot deny yourself out of manageAccess (which
+// would lock the door from the inside with the key still in it).
+async function overrideFor(discordId) {
+  try {
+    return await (await mongo.site.access()).findOne({ _id: discordId });
+  } catch {
+    // A store that will not answer must not silently widen anyone's access, and
+    // must not silently narrow it either. The ladder alone is the safe answer.
+    return null;
+  }
+}
+
+function applyOverride(base, ov) {
+  if (!ov) return base;
+  const out = { ...base };
+  for (const k of ov.grant || []) if (k in out) out[k] = true;
+  // Deny wins over grant. If a key is somehow in both, the restrictive reading
+  // is the one that cannot cause harm by being wrong.
+  for (const k of ov.deny || []) if (k in out) out[k] = false;
+  return out;
+}
+
+// Everything the caller is, resolved from their current Discord roles and then
+// from whatever exception has been recorded against them.
 async function context(req) {
-  if (!req.session) return { ranks: [], tier: 0, abilities: abilities(0) };
+  if (!req.session) return { ranks: [], tier: 0, abilities: abilities(0), override: null };
   const sessions = await mongo.collection(config.mongo.siteDb, 'sessions');
   const roles = await refreshRoles(req.session, sessions);
   const ranks = ranksFromRoles(roles);
   const tier = tierOf(ranks);
-  return { ranks, tier, abilities: abilities(tier) };
+  const ov = await overrideFor(req.session.discord.id);
+  return {
+    ranks,
+    tier,
+    abilities: applyOverride(abilities(tier), ov),
+    override: ov ? { grant: ov.grant || [], deny: ov.deny || [] } : null,
+  };
 }
 
 // Express guard. Checked per request against freshly-read roles, so revoking
@@ -130,7 +203,10 @@ function requires(action) {
     try {
       if (!req.session) return res.status(401).json({ error: 'login_required' });
       const ctx = await context(req);
-      if (!can(ctx.tier, action)) return res.status(403).json({ error: 'forbidden', need: action });
+      // ctx.abilities, not can(ctx.tier, …): the tier is only the default, and
+      // checking it here would let a denied ability straight through the door it
+      // was denied at.
+      if (!ctx.abilities[action]) return res.status(403).json({ error: 'forbidden', need: action });
       req.staff = ctx;
       next();
     } catch (err) {
@@ -143,5 +219,6 @@ function requires(action) {
 }
 
 module.exports = {
-  TIER, NEEDS, ranksFromRoles, tierOf, can, abilities, refreshRoles, fetchRoles, context, requires,
+  TIER, NEEDS, ABILITY_INFO, ranksFromRoles, tierOf, can, abilities,
+  refreshRoles, fetchRoles, context, requires, applyOverride,
 };

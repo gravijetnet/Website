@@ -6,6 +6,7 @@ const router = express.Router();
 
 const apps = require('../lib/applications');
 const mongo = require('../lib/mongo');
+const uploads = require('./uploads');
 
 // Applications are stored in our own database. The Discord bot keeps its own and
 // is not written to from here — it stays exactly as it is.
@@ -22,7 +23,9 @@ router.get('/apply/:role', (req, res) => {
     key: String(req.params.role).toLowerCase(),
     label: role.label,
     blurb: role.blurb,
-    questions: role.questions.map((q, i) => ({ index: i, text: q.text, long: q.long })),
+    questions: role.questions.map((q, i) => ({ index: i, text: q.text, long: q.long, upload: !!q.upload })),
+    maxFiles: uploads.MAX_PER_APPLICATION,
+    maxBytes: uploads.MAX_BYTES,
   });
 });
 
@@ -45,7 +48,40 @@ router.post('/apply/:role', express.json({ limit: '64kb' }), async (req, res) =>
   const key = String(req.params.role).toLowerCase();
   const discordId = req.session.discord.id;
 
+  // Attachments arrive as { "4": ["abc….png"] } — keyed by question index,
+  // because an upload only means anything next to the question it answers.
+  const sent = req.body?.attachments && typeof req.body.attachments === 'object' ? req.body.attachments : {};
+  const attachments = {};
+  let fileCount = 0;
+  for (const [k, v] of Object.entries(sent)) {
+    const i = Number(k);
+    if (!Number.isInteger(i) || !role.questions[i]) return res.status(400).json({ error: 'bad_attachment' });
+    // A question that does not take files does not take files. Otherwise the
+    // form is advisory and the API is the real interface.
+    if (!role.questions[i].upload) return res.status(400).json({ error: 'question_takes_no_files' });
+    const ids = Array.isArray(v) ? v.map(String) : [];
+    if (!ids.length) continue;
+    if (ids.some((id) => !/^[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(id))) {
+      return res.status(400).json({ error: 'bad_attachment' });
+    }
+    fileCount += ids.length;
+    attachments[i] = ids;
+  }
+  if (fileCount > uploads.MAX_PER_APPLICATION) return res.status(400).json({ error: 'too_many_files' });
+
   try {
+    // Every id must be a real upload that this account made. Without this check
+    // an application could cite any id it liked, and the reviewer's permission
+    // to read attachments would turn into permission to read anybody's.
+    if (fileCount) {
+      const ids = Object.values(attachments).flat();
+      const found = await (await mongo.site.uploads())
+        .find({ _id: { $in: ids }, discordId })
+        .project({ _id: 1 })
+        .toArray();
+      if (found.length !== ids.length) return res.status(400).json({ error: 'unknown_attachment' });
+    }
+
     const col = await mongo.site.applications();
 
     // One open application per role at a time, and a day between tries after a
@@ -73,7 +109,7 @@ router.post('/apply/:role', express.json({ limit: '64kb' }), async (req, res) =>
       discordName: req.session.discord.globalName || req.session.discord.username,
       // The questions are stored beside the answers on purpose: rewording a
       // question later must not silently change what an old applicant was asked.
-      qa: role.questions.map((q, i) => ({ q: q.text, a: clean[i] })),
+      qa: role.questions.map((q, i) => ({ q: q.text, a: clean[i], files: attachments[i] || [] })),
       submittedAt: Date.now(),
       reviewedAt: null,
       reviewedBy: null,

@@ -11,9 +11,28 @@ import {
   renderHome, renderLeaderboards, renderPlayer, renderPlayers,
   renderStaff, renderMedia, renderRules,
 } from './views.js';
-import { renderApply, renderReport, renderAppeal } from './forms.js';
 import { renderPlayerDash } from './dash-player.js';
 import { renderStaffDash } from './dash-staff.js';
+
+// Filing something is dashboard work, not site work.
+//
+// Apply, report and appeal used to be public pages that happened to demand a
+// login. That put the act of sending something in one place and every trace of
+// having sent it in another: you applied at /apply and then went looking for the
+// answer at /dashboard, and the page you filed on could not tell you that you
+// had already filed. Worse, submitting dropped you back onto the marketing site
+// — out of the dashboard, by accident, at exactly the moment you had reason to
+// stay in it.
+//
+// So they moved next to their own outcomes, and these keep the old addresses
+// working. A bookmark, a Discord message from last year and the footer all still
+// land somewhere sensible rather than on a 404.
+const MOVED = {
+  '/apply': '/dashboard/applications',
+  '/report': '/dashboard/report',
+  '/appeal': '/dashboard/appeal',
+  '/link': '/dashboard/account',
+};
 
 const app = document.getElementById('app');
 
@@ -134,6 +153,15 @@ function setTitle(t) {
 }
 
 async function route(path, params) {
+  // Before the chrome is chosen: a redirect must not flash the site header on
+  // its way to a dashboard page.
+  const moved = MOVED[path.replace(/\/$/, '')];
+  if (moved && !IS_DASH_HOST) return void navigate(moved, { replace: true });
+  // /apply/helper keeps its role, it just files it from indoors now.
+  if (!IS_DASH_HOST && path.startsWith('/apply/')) {
+    return void navigate(`/dashboard${path}`, { replace: true });
+  }
+
   const surface = surfaceFor(path);
   // A fresh chrome has a fresh #who and a fresh pill, so both are repainted.
   if (mountShell(surface)) {
@@ -153,7 +181,7 @@ async function route(path, params) {
     }
     if (seg[0] === 'dashboard') {
       setTitle('Your dashboard');
-      return await renderPlayerDash(app, seg[1] || '');
+      return await renderPlayerDash(app, seg[1] || '', seg[2] || null);
     }
     if (seg.length === 0) {
       setTitle('');
@@ -183,18 +211,6 @@ async function route(path, params) {
     if (seg[0] === 'rules') {
       setTitle('Rules');
       return await renderRules(app);
-    }
-    if (seg[0] === 'apply') {
-      setTitle('Apply');
-      return await renderApply(app, seg[1] || null);
-    }
-    if (seg[0] === 'report') {
-      setTitle('Report a player');
-      return await renderReport(app);
-    }
-    if (seg[0] === 'appeal') {
-      setTitle('Appeal');
-      return await renderAppeal(app);
     }
     setTitle('Not found');
     app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;

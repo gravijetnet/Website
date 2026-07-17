@@ -59,7 +59,11 @@ router.get('/me', async (req, res) => {
       minecraft: link ? { uuid: link.uuid, name: link.name, ranks: gameRanks } : null,
       ranks: ctx.ranks,
       tier: ctx.tier,
-      staff: ctx.tier > 0,
+      // Staff enough to reach Spielplatz. Usually that is a rank, but the access
+      // editor can grant a single ability to somebody with none — a trusted
+      // volunteer who may read reports and nothing else — and they must be able
+      // to get in to use it.
+      staff: ctx.tier > 0 || Object.values(ctx.abilities).some(Boolean),
       can: ctx.abilities,
     },
   });

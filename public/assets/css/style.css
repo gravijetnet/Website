@@ -240,7 +240,19 @@ h1, h2, h3, h4 { font-weight: 700; }
 .brand .word { font-size: 16px; font-weight: 700; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; white-space: nowrap; }
 .brand .word em { font-style: normal; color: var(--mc-aqua); }
 
-.nav-links { display: flex; gap: 2px; min-width: 0; }
+/* min-width:0 lets this shrink below its contents, which is what stops it
+   shoving the account off the end of the row — but the links inside are
+   `nowrap`, so shrinking alone made them spill straight out of the box and run
+   underneath everything to the right. That overlap was the bug: signed out
+   there was room and it never showed, signed in the avatar, the name, two doors
+   and a close button took the slack away and the destinations printed on top of
+   them. Contain the overflow and let it scroll instead — nothing is lost, and
+   nothing can ever be drawn over anything else again. */
+.nav-links {
+  display: flex; gap: 2px; min-width: 0;
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+}
+.nav-links::-webkit-scrollbar { display: none; }
 /* The gutter is reserved on every link, not added to the active one.
    `content: '> '` on :active-only widened whichever link was selected, so every
    link to its right slid sideways on navigation — the row visibly jolted each
@@ -259,7 +271,7 @@ h1, h2, h3, h4 { font-weight: 700; }
 .nav-links a.active { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .nav-links a.active::before { opacity: 1; }
 
-.nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
 
 .live-pill { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
 .live-dot { width: 8px; height: 8px; background: var(--mc-dark-gray); }
@@ -311,12 +323,6 @@ body[data-surface='staff'] .footer { background: rgba(0, 0, 0, 0.5); border-top:
 .cm-sub { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
 body[data-surface='staff'] .nav-links a::before { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
 body[data-surface='staff'] .nav-links a:hover { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
-
-/* The rank you are wielding, kept next to your name on the console only. */
-.who .wt {
-  font-size: 16px; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00;
-  padding: 0 6px; border: 2px solid rgba(255, 170, 0, 0.35);
-}
 
 /* search — a sunken text field */
 .search { position: relative; flex-shrink: 1; min-width: 0; }
@@ -648,6 +654,38 @@ body[data-surface='staff'] .nav-links a:hover { color: var(--mc-gold); text-shad
    let it sit in the same white as the ones that do something. */
 .rung .rd.unset { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
 
+/* The rulebook is now long enough that landing at the top of it and scrolling
+   is a bad way to answer "can I use a minimap". Six section links, the width of
+   the column, in the order the sections come — the game's own tab strip. */
+.rule-toc { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 16px; }
+.rule-toc a {
+  font-size: 16px; padding: 5px 9px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a;
+  border: 2px solid var(--slot-lo); background: #0d0d0d;
+}
+.rule-toc a:hover { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; border-color: var(--mc-white); }
+.rule-sec { scroll-margin-top: 68px; } /* the header is sticky and would eat the heading */
+.rule-intro {
+  color: var(--mc-gold); font-size: 16px; line-height: 1.5; text-shadow: 2px 2px 0 #3f2a00;
+  max-width: 68ch; margin: 0 0 4px;
+}
+.rule { padding: 12px 0; border-bottom: 2px solid rgba(255, 255, 255, 0.07); scroll-margin-top: 68px; }
+.rule:last-child { border-bottom: 0; padding-bottom: 0; }
+.rule-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
+.rule-head h4 { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+/* Says "this one has a ladder behind it" without printing the ladder twice. */
+.rule-tag {
+  font-size: 16px; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00;
+  border: 2px solid rgba(255, 170, 0, 0.35); padding: 0 5px; line-height: 1.3;
+}
+/* The part that answers "yes but what about…". Dimmer than the rule itself:
+   it is the footnote, and it must not read as another rule. */
+.rule-detail {
+  color: var(--mc-dark-gray); font-size: 16px; line-height: 1.5;
+  text-shadow: 2px 2px 0 #1a1a1a; max-width: 68ch; margin: 6px 0 0;
+}
+.rule .block { margin-top: 10px; }
+.rule-stamp { color: var(--mc-dark-gray); font-size: 16px; text-shadow: 2px 2px 0 #1a1a1a; margin-top: 14px; }
+
 /* ------------------------------------------------------------------- forms */
 .container.narrow { max-width: 760px; }
 .frow { margin-bottom: 14px; }
@@ -677,16 +715,44 @@ select.fld { cursor: url('../img/crosshair.png') 16 16, crosshair; }
 .qa-q { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; margin-bottom: 3px; }
 .qa-a { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; line-height: 1.5; white-space: pre-wrap; }
 
-/* ------------------------------------------------------------------- who */
-.who { display: flex; align-items: center; gap: 7px; }
-.who img { image-rendering: auto; border-radius: 50%; flex-shrink: 0; }
-.who .wn { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.who .wd { font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
-.who .wo {
-  font: inherit; font-size: 16px; line-height: 1; padding: 2px 6px;
-  background: none; border: 0; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a;
+/* --------------------------------------------------------------- account */
+/* One avatar, and everything about you behind it. See shell.js accountMenu:
+   the five loose pieces this replaces are what made the strip overlap itself.
+   Fixed 24px avatar and a caret — this is now the one part of the header whose
+   width does not depend on how long somebody's Discord name is. */
+.acct { position: relative; flex-shrink: 0; }
+.acct-btn {
+  display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px;
+  background: none; border: 2px solid transparent; cursor: pointer;
 }
-.who .wo:hover { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+.acct-btn:hover, .acct-btn[aria-expanded='true'] { border-color: var(--slot-lo); background: #000; }
+.acct-btn img { width: 24px; height: 24px; image-rendering: auto; border-radius: 50%; }
+.am-blank { width: 24px; height: 24px; background: var(--slot-lo); display: block; }
+.acct-caret { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; line-height: 1; }
+.acct-btn:hover .acct-caret, .acct-btn[aria-expanded='true'] .acct-caret { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+
+.acct-menu {
+  position: absolute; top: 38px; right: 0; z-index: 60; min-width: 176px;
+  background: rgba(0, 0, 0, 0.94); border: 2px solid var(--mc-white); padding: 2px;
+  display: flex; flex-direction: column;
+}
+.acct-menu[hidden] { display: none; }
+.am-head {
+  display: flex; flex-direction: column; line-height: 1.2;
+  padding: 6px 8px; border-bottom: 2px solid rgba(255, 255, 255, 0.12); margin-bottom: 2px;
+}
+.am-name { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-rank { font-size: 16px; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+.am-rank.am-none { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.am-item {
+  font: inherit; font-size: 16px; text-align: left; padding: 5px 8px;
+  background: none; border: 0; cursor: pointer;
+  color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a;
+}
+.am-item:hover { background: var(--mc-dark-blue); color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+.am-out { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.am-out:hover { background: none; color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+
 .who-btn { font-size: 16px; padding: 6px 12px; min-height: 32px; display: inline-flex; align-items: center; }
 .dcount {
   margin-left: 7px; padding: 0 5px; font-size: 16px;
@@ -724,8 +790,6 @@ select.fld { cursor: url('../img/crosshair.png') 16 16, crosshair; }
   .search-input { width: 148px; }
 }
 @media (max-width: 1020px) {
-  /* The console's rank chip repeats what the tab you are on already tells you. */
-  .who .wt { display: none; }
   .nav-links a { padding: 4px 5px 4px 17px; }
   .nav-links a::before { left: 5px; }
 }
@@ -754,9 +818,6 @@ select.fld { cursor: url('../img/crosshair.png') 16 16, crosshair; }
   .brand .word em { display: none; }
   .search { display: flex; flex: 1; min-width: 0; }
   .search-input { width: 100%; min-width: 0; }
-  /* Your name is the least useful thing in a 390px header — the avatar and the
-     doors out of here are what get used. */
-  .who .wn { display: none; }
   .telemetry, .p-summary { grid-template-columns: 1fr; }
   /* The row can't hold four things side by side this narrow: the numbers go
      under the name, and the blurb goes — the name and its stats are the point. */
@@ -841,3 +902,82 @@ a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
 /* Where a record came from, when that changes how to read it — an application
    imported from the Discord bot is history, not something you can rule on. */
 .tagged { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+
+/* ------------------------------------------- filing, uploads, moderation UI */
+
+/* A crumb back to the list a form belongs to, now that the forms live inside
+   the dashboard rather than at their own address. */
+.crumb {
+  display: inline-block; margin-bottom: 12px; font-size: 16px;
+  color: var(--mc-aqua); text-shadow: 2px 2px 0 #10353f;
+}
+.crumb:hover { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+
+/* The apply picker: rows that lead to a form. No question count, no status
+   badge — the count belonged to nobody's decision and the status is on the
+   Applications tab where a decision is actually the subject. */
+.mode-row .m-go { font-size: 16px; color: var(--mc-aqua); text-shadow: 2px 2px 0 #10353f; flex-shrink: 0; }
+.mode-row:hover .m-go { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+
+/* Screenshot uploader on a question that takes them. */
+.uploader { margin: 6px 0 4px; }
+.upl-btn { position: relative; overflow: hidden; }
+.upl-hint { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; margin-left: 8px; }
+.upl-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.upl-item {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+  background: #000; border: 2px solid var(--slot-lo);
+}
+.upl-item img { width: 40px; height: 40px; object-fit: cover; image-rendering: auto; }
+.upl-name { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upl-x { font: inherit; font-size: 16px; background: none; border: 0; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; cursor: pointer; }
+.upl-x:hover { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+
+/* An online player, on the console look-up. */
+.online-dot { display: inline-block; width: 9px; height: 9px; background: var(--mc-green); box-shadow: 0 0 0 2px #10230f; vertical-align: middle; }
+
+/* Punish and rank controls on the player card. A row of selects, then a reason,
+   then the button — the shape of the command it becomes. */
+.prow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.prow .fld { width: auto; flex: 0 1 auto; min-width: 120px; }
+.pcheck { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+.fld-inline { width: auto; flex: 1; min-width: 140px; }
+#punishblock { border-left: 3px solid rgba(255, 85, 85, 0.4); padding-left: 12px; }
+#rankblock { border-left: 3px solid rgba(85, 255, 85, 0.35); padding-left: 12px; }
+
+/* ------------------------------------------------------ the rules editor */
+.ed-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 0; margin-bottom: 12px;
+  border-bottom: 2px solid rgba(255, 170, 0, 0.28); position: sticky; top: 56px;
+  background: #070707; z-index: 20;
+}
+.ed-sec { margin-bottom: 14px; }
+.ed-sechead { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ed-title { font-weight: 700; }
+.ed-intro { margin-bottom: 10px; }
+.ed-moves { display: flex; gap: 4px; flex-shrink: 0; }
+.ed-mini { padding: 2px 8px; font-size: 16px; min-height: 0; }
+.ed-del { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+.ed-rules { display: flex; flex-direction: column; gap: 10px; }
+.ed-rule { padding: 10px; border: 2px solid var(--slot-lo); background: rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 6px; }
+.ed-rulehead { display: flex; gap: 8px; align-items: center; }
+.ed-rtitle { flex: 1; }
+.ed-detail { color: var(--mc-gray); }
+.ed-ladder { display: flex; align-items: center; gap: 8px; font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.ed-ladder .fld { width: auto; flex: 0 1 260px; }
+.ed-addrule { margin-top: 10px; }
+
+/* --------------------------------------------------------- the access grid */
+.acc-person { margin-bottom: 12px; }
+.acc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.acc-item {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: baseline;
+  padding: 6px 8px; border: 2px solid transparent; cursor: pointer;
+}
+.acc-item:hover { border-color: var(--slot-lo); }
+.acc-label { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.acc-note { grid-column: 2; font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+/* A box that no longer matches the rank default — an exception you have made. */
+.acc-over { border-color: rgba(255, 170, 0, 0.5); }
+.acc-item input[disabled] { opacity: 0.4; }

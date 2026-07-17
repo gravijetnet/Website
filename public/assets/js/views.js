@@ -707,9 +707,9 @@ export function renderMedia(root) {
 
 export async function renderRules(root) {
   root.innerHTML = pageLoader();
-  let rules;
+  let data;
   try {
-    rules = await api.rules();
+    data = await api.rules();
   } catch {
     root.innerHTML = notice('Rules unavailable', 'The rules could not be loaded. Try again in a moment.');
     return;
@@ -725,28 +725,43 @@ export async function renderRules(root) {
     return dur(s.duration);
   };
 
-  // Every consequence here is read from the server's own punishment ladder, so
-  // the page cannot promise something the network doesn't do.
+  // Consequences are read from the network's own punishment ladders, so the page
+  // cannot promise something the core does not actually do. A rule with no
+  // ladder is still a rule — most of them are — and simply says what it is.
+  const ladder = (c) => `
+    <div class="block">
+      <div class="block-label">What happens — ${esc(c.label)}</div>
+      <div class="ladder">
+        ${c.steps
+          .map(
+            (s) => `
+          <div class="rung">
+            <span class="rn">${esc(ordinal(s.order))}</span>
+            <span class="rt ${s.type === 'BAN' || s.type === 'BLACKLIST' ? 'hard' : ''}">${esc(titleCase(s.type.toLowerCase()))}</span>
+            <span class="rd ${s.duration === 0 && s.type !== 'KICK' ? 'unset' : ''}">${esc(stepDuration(s))}</span>
+          </div>`,
+          )
+          .join('')}
+      </div>
+    </div>`;
+
   const rule = (r) => `
-    <section class="panel entry">
-      ${panelHead('rules', r.title, `${r.steps.length} ${r.steps.length === 1 ? 'step' : 'steps'}`)}
+    <div class="rule" id="${esc(r.id)}">
+      <div class="rule-head">
+        <h4>${esc(r.title)}</h4>
+        ${r.consequence ? `<span class="rule-tag">escalates</span>` : ''}
+      </div>
+      <p class="rule-text">${esc(r.body)}</p>
+      ${r.detail ? `<p class="rule-detail">${esc(r.detail)}</p>` : ''}
+      ${r.consequence ? ladder(r.consequence) : ''}
+    </div>`;
+
+  const section = (s) => `
+    <section class="panel entry rule-sec" id="${esc(s.id)}">
+      ${panelHead('rules', s.title, `${s.rules.length}`)}
       <div class="panel-body">
-        ${r.blurb ? `<p class="rule-text">${esc(r.blurb)}</p>` : ''}
-        <div class="block">
-          <div class="block-label">What happens</div>
-          <div class="ladder">
-            ${r.steps
-              .map(
-                (s) => `
-              <div class="rung">
-                <span class="rn">${esc(ordinal(s.order))}</span>
-                <span class="rt ${s.type === 'BAN' || s.type === 'BLACKLIST' ? 'hard' : ''}">${esc(titleCase(s.type.toLowerCase()))}</span>
-                <span class="rd ${s.duration === 0 && s.type !== 'KICK' ? 'unset' : ''}">${esc(stepDuration(s))}</span>
-              </div>`,
-              )
-              .join('')}
-          </div>
-        </div>
+        ${s.intro ? `<p class="rule-intro">${esc(s.intro)}</p>` : ''}
+        ${s.rules.map(rule).join('')}
       </div>
     </section>`;
 
@@ -755,13 +770,25 @@ export async function renderRules(root) {
       <div class="container">
         <div class="section-head">
           <div>
-            <span class="eyebrow">Ordered by how seriously we take them</span>
+            <span class="eyebrow">Read once, and you will never need them again</span>
             <h2>Rules</h2>
           </div>
         </div>
-        ${rules.map(rule).join('')}
+        <nav class="rule-toc">
+          ${data.sections.map((s) => `<a href="#${esc(s.id)}">${esc(s.title)}</a>`).join('')}
+        </nav>
+        ${data.sections.map(section).join('')}
+        ${
+          data.updatedAt
+            ? `<p class="rule-stamp">Last changed ${esc(timeAgo(data.updatedAt))}.</p>`
+            : ''
+        }
       </div>
     </section>`;
+
+  // The in-page links are real anchors, so the router's interception would try
+  // to navigate to them. It only catches hrefs starting with "/", and these
+  // start with "#", so they fall through to the browser — which is what we want.
 }
 
 // ========================================================== directory =======

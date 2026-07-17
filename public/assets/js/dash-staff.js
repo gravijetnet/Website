@@ -1,16 +1,23 @@
-// The staff console, at spielplatz.example.invalid.
+// Spielplatz, the staff console, at spielplatz.example.invalid.
 //
-// Nothing here bans, kicks or mutes. Phoenix keeps punishments in memory and
-// syncs them over Redis, so a row written behind its back would miss anyone
-// currently online and could be overwritten by the plugin that owns it.
-// Punishments stay in game. This decides what the website shows, rules on what
-// the website's own forms produced, and — the part that is new — tells you what
-// you are looking at before you rule on it.
+// This used to only be able to change what the website showed — hide a player,
+// rule on a form — on the reasoning that a punishment row written behind
+// Phoenix's back would reach nobody. That is still true, and it is why nothing
+// here writes to Phoenix directly. What changed is that it no longer needs to:
+// punishments and rank changes are handed to MoreFeatures through a queue, and
+// the plugin performs them through the core's own API, in game, for real. See
+// server/lib/actions and the plugin's ActionQueue.
+//
+// So Spielplatz now does three kinds of thing: it shows the network, it rules on
+// what the website's own forms produced, and — Admin and up — it reaches into
+// the game to punish, promote, and change the rules everyone plays by.
 import { api } from './api.js';
 import { icons } from './icons.js';
 import { pageLoader, notice } from './components.js';
 import { paintStaffTabs, STAFF_TABS } from './shell.js';
-import { esc, head, int, timeAgo, dateShort, playtime } from './util.js';
+import { esc, head, int, timeAgo, dateShort, playtime, dur } from './util.js';
+import { renderRulesEditor } from './dash-rules.js';
+import { renderAccess } from './dash-access.js';
 
 const SITE = 'https://example.invalid';
 
@@ -47,7 +54,7 @@ export async function renderStaffDash(root, tab) {
   if (!active) {
     root.innerHTML = notice(
       allowed.length ? 'No such page' : 'Nothing to do',
-      allowed.length ? 'That is not a page on the console.' : 'Your rank has no console permissions.',
+      allowed.length ? 'That is not a page on Spielplatz.' : 'Your rank has no Spielplatz permissions.',
     );
     return;
   }
@@ -61,6 +68,8 @@ export async function renderStaffDash(root, tab) {
     else if (active.key === 'reports') await paintReports(body, can);
     else if (active.key === 'appeals') await paintAppeals(body, can);
     else if (active.key === 'players') await paintPlayers(body, can);
+    else if (active.key === 'rules') await renderRulesEditor(body, can);
+    else if (active.key === 'access') await renderAccess(body, can);
     else if (active.key === 'audit') await paintAudit(body);
   } catch (err) {
     console.error(err);
@@ -537,6 +546,9 @@ function playerCard(p, can) {
           }
         </div>
 
+        ${(can.punishPlayers || can.banPlayers) ? punishBlock(p, can) : ''}
+        ${can.manageRanks ? rankBlock(p) : ''}
+
         ${
           can.hidePlayers
             ? `<div class="block">
@@ -553,6 +565,87 @@ function playerCard(p, can) {
         }
       </div>
     </section>`;
+}
+
+// The live restrictions on a player, each with the button that lifts it. Only
+// live ones: a kick and an expired ban have nothing to revoke.
+function liveRevocable(p) {
+  return p.punishments.filter((x) => x.live && x.appealable);
+}
+
+// Mute / kick / tempban / permban / blacklist, and lifting a live one. Durations
+// are named, not typed in milliseconds — a text box asking for "how many ms"
+// is how somebody bans for 30 seconds meaning 30 days.
+const DURATIONS = [
+  { label: '30 min', ms: 30 * 60000 },
+  { label: '1 hour', ms: 3600000 },
+  { label: '6 hours', ms: 6 * 3600000 },
+  { label: '1 day', ms: 86400000 },
+  { label: '7 days', ms: 7 * 86400000 },
+  { label: '30 days', ms: 30 * 86400000 },
+];
+
+function punishBlock(p, can) {
+  const live = liveRevocable(p);
+  return `
+    <div class="block" id="punishblock">
+      <div class="block-label">Punish</div>
+      <p class="rule-text">This takes effect in game, now, through the core — exactly as if you had typed the command. It is recorded against your name, which the player never sees.</p>
+      <div class="prow">
+        <select class="fld" id="ptype">
+          <option value="mute">Mute</option>
+          <option value="kick">Kick</option>
+          <option value="ban">Ban</option>
+          ${can.banPlayers ? '<option value="blacklist">Blacklist (IP)</option>' : ''}
+        </select>
+        <select class="fld" id="pdur">
+          ${DURATIONS.map((d) => `<option value="${d.ms}">${d.label}</option>`).join('')}
+          ${can.banPlayers ? '<option value="perm">Permanent</option>' : ''}
+        </select>
+        <label class="pcheck"><input type="checkbox" id="psilent"> Silent</label>
+      </div>
+      <input class="fld" id="preason" maxlength="200" placeholder="Reason — the player sees this">
+      <div class="factions">
+        <button class="btn btn-primary" id="pdo">Punish ${esc(p.name)}</button>
+        <span class="fmsg" id="pmsg2"></span>
+      </div>
+      ${
+        live.length
+          ? `<div class="block" style="margin-top:10px">
+               <div class="block-label">Lift a live punishment</div>
+               ${live
+                 .map(
+                   (x) => `<div class="factions" data-revoke="${esc(x.id)}">
+                     <span class="dr">${esc(x.type)} · ${esc(x.id)} · ${esc(x.reason || 'no reason')}</span>
+                     <input class="fld fld-inline" placeholder="Why you are lifting it" maxlength="200">
+                     <button class="btn">Lift</button>
+                   </div>`,
+                 )
+                 .join('')}
+             </div>`
+          : ''
+      }
+    </div>`;
+}
+
+function rankBlock(p) {
+  return `
+    <div class="block" id="rankblock">
+      <div class="block-label">Rank</div>
+      <p class="rule-text">Promote or demote in game. The Discord bot posts the same announcement it always has. You cannot hand out a rank at or above your own.</p>
+      <div class="prow">
+        <select class="fld" id="rmode">
+          <option value="grant">Promote to</option>
+          <option value="ungrant">Demote from</option>
+        </select>
+        <select class="fld" id="rrank"><option value="">Loading ranks…</option></select>
+      </div>
+      <input class="fld" id="rreason" maxlength="200" placeholder="Reason — goes in the announcement">
+      <div class="factions">
+        <button class="btn btn-primary" id="rdo">Apply</button>
+        <span class="fmsg" id="rmsg"></span>
+      </div>
+    </div>`;
 }
 
 function wirePlayerCard(body, card, p, can) {
@@ -591,6 +684,183 @@ function wirePlayerCard(body, card, p, can) {
       }
     });
   }
+
+  wirePunish(card, p, refresh);
+  wireRank(card, p, refresh);
+}
+
+// The website only queues a job; the game does the work a moment later. So these
+// do not claim success on a 202 — they watch the job until the plugin has
+// actually done it, and report what the game said. A ban that "worked" on the
+// website and failed in game is the one outcome staff must never be told is fine.
+const PUNISH_ERR = {
+  target_is_staff: 'They outrank what you may punish from here.',
+  reason_required: 'A reason is required.',
+  duration_required: 'Pick a duration.',
+  duration_too_long: 'Longer than the core will accept.',
+  forbidden: 'Your rank does not cover that punishment.',
+  plugin_missing: 'The game-side plugin is not deployed yet, so this cannot reach the server.',
+  bot_missing: 'The Discord bot has not been deployed with rank sync yet.',
+  unknown_player: 'No player by that name.',
+  rank_too_high: 'That rank is at or above your own.',
+  unknown_rank: 'No such rank.',
+  rank_not_on_discord: 'That rank has no Discord role, so it can only be granted in game.',
+  target_not_linked: 'They have not linked their Discord — they must /link before they can be promoted here.',
+  not_live: 'That punishment is not active any more.',
+};
+
+function punishErr(err) {
+  return PUNISH_ERR[err?.body?.error] || 'That did not go through.';
+}
+
+// Polls a queued job to its end. Resolves with the final row, or a timed-out
+// shape if the game never got to it — which is itself worth showing, because it
+// means no server was up to do it.
+async function awaitJob(jobId, msg) {
+  for (let i = 0; i < 20; i++) {
+    let row;
+    try {
+      row = await api.dash.action(jobId);
+    } catch {
+      return { status: 'unknown' };
+    }
+    if (row.status === 'done' || row.status === 'failed') return row;
+    if (msg) msg.textContent = i < 2 ? 'Sending to the server…' : 'Waiting for the server…';
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return { status: 'pending' };
+}
+
+function reportJob(msg, row, doneText) {
+  if (row.status === 'done') { msg.className = 'fmsg ok'; msg.textContent = doneText; return true; }
+  if (row.status === 'failed') { msg.className = 'fmsg bad'; msg.textContent = `The server refused it: ${esc(row.result || 'no reason')}`; return false; }
+  if (row.status === 'pending') { msg.className = 'fmsg bad'; msg.textContent = 'No server picked it up — is one online?'; return false; }
+  msg.className = 'fmsg';
+  msg.textContent = 'Queued. It will run when a server is next up.';
+  return false;
+}
+
+function wirePunish(card, p, refresh) {
+  const btn = card.querySelector('#pdo');
+  if (btn) {
+    const msg = card.querySelector('#pmsg2');
+    btn.addEventListener('click', async () => {
+      const type = card.querySelector('#ptype').value;
+      const durVal = card.querySelector('#pdur').value;
+      const reason = card.querySelector('#preason').value.trim();
+      if (!reason) { msg.className = 'fmsg bad'; msg.textContent = 'A reason is required.'; return; }
+      const body = {
+        name: p.name,
+        type,
+        reason,
+        silent: card.querySelector('#psilent').checked,
+        permanent: durVal === 'perm',
+        durationMs: durVal === 'perm' ? 0 : Number(durVal),
+      };
+      btn.disabled = true;
+      msg.className = 'fmsg';
+      msg.textContent = 'Queuing…';
+      try {
+        const { jobId } = await api.dash.punish(body);
+        const row = await awaitJob(jobId, msg);
+        if (reportJob(msg, row, `${type} applied.`)) setTimeout(refresh, 900);
+        else btn.disabled = false;
+      } catch (err) {
+        btn.disabled = false;
+        msg.className = 'fmsg bad';
+        msg.textContent = punishErr(err);
+      }
+    });
+  }
+
+  card.querySelectorAll('[data-revoke]').forEach((rowEl) => {
+    const b = rowEl.querySelector('button');
+    b.addEventListener('click', async () => {
+      const reason = rowEl.querySelector('input').value.trim();
+      if (!reason) { rowEl.querySelector('input').focus(); return; }
+      b.disabled = true;
+      try {
+        const { jobId } = await api.dash.revoke(rowEl.dataset.revoke, reason);
+        const row = await awaitJob(jobId, null);
+        if (row.status === 'done') setTimeout(refresh, 900);
+        else b.disabled = false;
+      } catch {
+        b.disabled = false;
+      }
+    });
+  });
+}
+
+async function wireRank(card, p, refresh) {
+  const btn = card.querySelector('#rdo');
+  if (!btn) return;
+  const sel = card.querySelector('#rrank');
+  const msg = card.querySelector('#rmsg');
+
+  // The rank list is the same for everybody, so it is fetched once and cached on
+  // the module rather than per player card.
+  try {
+    const ranks = await ranksOnce();
+    sel.innerHTML = ranks
+      .map((r) => `<option value="${esc(r.name)}" style="color:${r.color}">${esc(r.name)}</option>`)
+      .join('');
+  } catch {
+    sel.innerHTML = '<option value="">Could not load ranks</option>';
+  }
+
+  btn.addEventListener('click', async () => {
+    const rank = sel.value;
+    const mode = card.querySelector('#rmode').value;
+    const reason = card.querySelector('#rreason').value.trim();
+    if (!rank) return;
+    if (!reason) { msg.className = 'fmsg bad'; msg.textContent = 'A reason is required.'; return; }
+    btn.disabled = true;
+    msg.className = 'fmsg';
+    msg.textContent = 'Asking the bot…';
+    try {
+      // A rank change goes through Discord — the bot adds the role, the sync
+      // carries it into the game and posts the announcement. So this watches the
+      // bot's task, not a game job, and says the in-game rank follows.
+      const { taskId } = await api.dash.grant({ name: p.name, rank, mode, reason });
+      const row = await awaitGrant(taskId, msg);
+      if (row.status === 'done') {
+        msg.className = 'fmsg ok';
+        msg.textContent = mode === 'grant'
+          ? `${rank} role added — the in-game rank follows in a moment.`
+          : `${rank} role removed — the in-game rank follows in a moment.`;
+        setTimeout(refresh, 2500);
+      } else if (row.status === 'failed') {
+        msg.className = 'fmsg bad';
+        msg.textContent = `The bot could not: ${esc(row.result || 'no reason')}`;
+        btn.disabled = false;
+      } else {
+        msg.className = 'fmsg';
+        msg.textContent = 'Queued for the bot. It will run shortly.';
+        btn.disabled = false;
+      }
+    } catch (err) {
+      btn.disabled = false;
+      msg.className = 'fmsg bad';
+      msg.textContent = punishErr(err);
+    }
+  });
+}
+
+async function awaitGrant(taskId, msg) {
+  for (let i = 0; i < 15; i++) {
+    let row;
+    try { row = await api.dash.grantStatus(taskId); } catch { return { status: 'unknown' }; }
+    if (row.status === 'done' || row.status === 'failed') return row;
+    if (msg) msg.textContent = 'Waiting for the bot…';
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return { status: 'pending' };
+}
+
+let _ranks = null;
+function ranksOnce() {
+  if (!_ranks) _ranks = api.dash.ranks();
+  return _ranks;
 }
 
 async function paintHidden(box) {

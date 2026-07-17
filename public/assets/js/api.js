@@ -40,8 +40,28 @@ export const api = {
 
   applyRoles: () => get('/apply'),
   applyForm: (role) => get(`/apply/${encodeURIComponent(role)}`),
-  applySubmit: (role, answers) => send(`/apply/${encodeURIComponent(role)}`, 'POST', { answers }),
+  // attachments is { questionIndex: [uploadId, …] }, empty for most roles.
+  applySubmit: (role, answers, attachments = {}) =>
+    send(`/apply/${encodeURIComponent(role)}`, 'POST', { answers, attachments }),
   myApplications: () => get('/my/applications'),
+
+  // One image as the raw body — see routes/uploads for why there is no multipart
+  // here. Not the JSON `send` helper: this posts bytes, not a stringified object.
+  upload: async (file) => {
+    const res = await fetch(`/api/uploads?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      credentials: 'include',
+      body: file,
+    });
+    if (!res.ok) {
+      const err = new Error(`upload failed: ${res.status}`);
+      err.status = res.status;
+      try { err.body = await res.json(); } catch { /* ignore */ }
+      throw err;
+    }
+    return res.json();
+  },
 
   // The signed-in player's own paperwork.
   my: {
@@ -75,6 +95,22 @@ export const api = {
     hide: (name, reason) => send('/dash/hidden', 'POST', { name, reason }),
     unhide: (uuid) => send(`/dash/hidden/${uuid}`, 'DELETE'),
     audit: () => get('/dash/audit'),
+
+    // Reaching into the game — routes/moderation.
+    punish: (body) => send('/dash/punish', 'POST', body),
+    revoke: (pid, reason) => send(`/dash/punish/${encodeURIComponent(pid)}/revoke`, 'POST', { reason }),
+    ranks: () => get('/dash/ranks'),
+    grant: (body) => send('/dash/grant', 'POST', body),
+    grantStatus: (id) => get(`/dash/grant/${id}`),
+    actions: () => get('/dash/actions'),
+    action: (id) => get(`/dash/actions/${id}`),
+
+    // Admin surface — routes/admin.
+    rules: () => get('/dash/rules'),
+    saveRules: (sections) => send('/dash/rules', 'PUT', { sections }),
+    resetRules: () => send('/dash/rules/reset', 'POST'),
+    access: () => get('/dash/access'),
+    setAccess: (id, grant, deny) => send(`/dash/access/${encodeURIComponent(id)}`, 'PUT', { grant, deny }),
   },
 
   health: () => get('/health'),

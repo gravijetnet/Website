@@ -12,8 +12,12 @@ import { api } from './api.js';
 import { icons } from './icons.js';
 import { pageLoader, notice } from './components.js';
 import { esc, head, timeAgo, dateShort, dur } from './util.js';
+import { renderApply, renderReport, renderAppeal } from './forms.js';
 
-const TABS = ['', 'applications', 'reports', 'appeals', 'account'];
+// The list tabs, plus the three verbs that file into them. apply/report/appeal
+// are sub-pages of their list — see shell.PLAYER_TAB_OF, which lights the list
+// tab up while you are on its form.
+const TABS = ['', 'applications', 'reports', 'appeals', 'account', 'apply', 'report', 'appeal'];
 
 function wall(returnTo) {
   return `
@@ -33,7 +37,7 @@ function wall(returnTo) {
     </div>`;
 }
 
-export async function renderPlayerDash(root, tab) {
+export async function renderPlayerDash(root, tab, sub) {
   root.innerHTML = pageLoader();
   const me = await api.me().catch(() => ({ user: null }));
   if (!me.user) return void (root.innerHTML = wall(location.pathname));
@@ -48,6 +52,11 @@ export async function renderPlayerDash(root, tab) {
     else if (tab === 'reports') await paintReports(body);
     else if (tab === 'appeals') await paintAppeals(body);
     else if (tab === 'account') await paintAccount(body, me);
+    // The three filing verbs, rendered by forms.js into this same body. They are
+    // only reachable signed in, which the wall above has already guaranteed.
+    else if (tab === 'apply') await renderApply(body, sub);
+    else if (tab === 'report') await renderReport(body);
+    else if (tab === 'appeal') await renderAppeal(body, sub);
   } catch (err) {
     console.error(err);
     body.innerHTML = `<div class="empty">That could not be loaded. Try again in a moment.</div>`;
@@ -87,9 +96,9 @@ async function paintOverview(body) {
     <div class="block">
       <div class="block-label">Do something</div>
       <div class="factions">
-        <a class="btn" href="/apply">Apply for a rank</a>
-        <a class="btn" href="/report">Report a player</a>
-        <a class="btn" href="/appeal">Appeal a punishment</a>
+        <a class="btn" href="/dashboard/apply">Apply for a rank</a>
+        <a class="btn" href="/dashboard/report">Report a player</a>
+        <a class="btn" href="/dashboard/appeal">Appeal a punishment</a>
       </div>
     </div>`;
 }
@@ -112,7 +121,7 @@ function linkedCard(mc) {
       </div>
       ${
         mc.activePunishments
-          ? `<div class="panel-body"><div class="pwarn">You have ${mc.activePunishments} active punishment${mc.activePunishments === 1 ? '' : 's'}. <a href="/dashboard/account">See them</a> or <a href="/appeal">appeal</a>.</div></div>`
+          ? `<div class="panel-body"><div class="pwarn">You have ${mc.activePunishments} active punishment${mc.activePunishments === 1 ? '' : 's'}. <a href="/dashboard/account">See them</a> or <a href="/dashboard/appeal">appeal</a>.</div></div>`
           : ''
       }
     </section>`;
@@ -151,12 +160,12 @@ async function paintApplications(body) {
   body.innerHTML = `
     <div class="section-head">
       <div><h2>Your applications</h2><p>What you sent, and where it got to.</p></div>
-      <a class="btn" href="/apply">New application</a>
+      <a class="btn" href="/dashboard/apply">New application</a>
     </div>
     ${
       list.length
         ? list.map(applicationCard).join('')
-        : nothing('You have not applied for anything.', { href: '/apply', label: 'Apply for a rank' })
+        : nothing('You have not applied for anything.', { href: '/dashboard/apply', label: 'Apply for a rank' })
     }`;
 }
 
@@ -195,7 +204,7 @@ async function paintReports(body) {
   body.innerHTML = `
     <div class="section-head">
       <div><h2>Reports you filed</h2><p>Thanks for these. Staff read every one.</p></div>
-      <a class="btn" href="/report">Report a player</a>
+      <a class="btn" href="/dashboard/report">Report a player</a>
     </div>
     ${
       list.length
@@ -218,7 +227,7 @@ async function paintReports(body) {
       </section>`;
             })
             .join('')
-        : nothing('You have not reported anyone.', { href: '/report', label: 'Report a player' })
+        : nothing('You have not reported anyone.', { href: '/dashboard/report', label: 'Report a player' })
     }`;
 }
 
@@ -234,7 +243,7 @@ async function paintAppeals(body) {
   body.innerHTML = `
     <div class="section-head">
       <div><h2>Your appeals</h2><p>Punishments you have asked us to look at again.</p></div>
-      <a class="btn" href="/appeal">New appeal</a>
+      <a class="btn" href="/dashboard/appeal">New appeal</a>
     </div>
     ${
       list.length
@@ -258,7 +267,7 @@ async function paintAppeals(body) {
       </section>`;
             })
             .join('')
-        : nothing('You have not appealed anything.', { href: '/appeal', label: 'Appeal a punishment' })
+        : nothing('You have not appealed anything.', { href: '/dashboard/appeal', label: 'Appeal a punishment' })
     }`;
 }
 
@@ -410,7 +419,7 @@ function punishmentRow(p) {
       </div>
       <div>
         <span class="badge ${st.cls}">${esc(st.label)}</span>
-        ${p.appealable ? ' <a class="btn" href="/appeal">Appeal</a>' : ''}
+        ${p.appealable ? ' <a class="btn" href="/dashboard/appeal">Appeal</a>' : ''}
       </div>
     </div>`;
 }

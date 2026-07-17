@@ -14,6 +14,10 @@
 //           nobody to find here but you.
 //   staff   the console: no dirt, no marketing, a caution accent, and a standing
 //           reminder that every button here is signed.
+//
+// One rule holds across all three: the brand, top left, always goes home to
+// example.invalid. It is the one thing on the page that means the same everywhere,
+// and it is how you get out of a dashboard.
 import { api } from './api.js';
 import { esc, head } from './util.js';
 
@@ -43,8 +47,12 @@ const NAV = [
   { href: '/rules', match: '/rules', label: 'Rules' },
 ];
 
-// The player's own tabs. `need` is not a permission — everyone may see all of
-// these — it is just what the tab is called in the URL.
+// The player's own tabs. Everyone signed in may see all of these.
+//
+// Apply, report and appeal are not tabs of their own: they are things you do
+// *to* a list you are already looking at, so each lives as an action on the tab
+// that will show you the result. A separate "Apply" destination would be a
+// fourth place to check for an answer that arrives in Applications.
 export const PLAYER_TABS = [
   { key: '', label: 'Overview' },
   { key: 'applications', label: 'Applications' },
@@ -53,6 +61,14 @@ export const PLAYER_TABS = [
   { key: 'account', label: 'Account' },
 ];
 
+// Sub-pages that belong to a tab. /dashboard/apply is the Applications tab with
+// a form on it, so Applications is what should light up.
+const PLAYER_TAB_OF = {
+  apply: 'applications',
+  report: 'reports',
+  appeal: 'appeals',
+};
+
 // The console's tabs, each gated on an ability the server also enforces. Hiding
 // a tab is a courtesy, not the check: /api refuses regardless of what is drawn.
 export const STAFF_TABS = [
@@ -60,7 +76,9 @@ export const STAFF_TABS = [
   { key: 'applications', label: 'Applications', need: 'viewApplications' },
   { key: 'reports', label: 'Reports', need: 'viewReports' },
   { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
-  { key: 'players', label: 'Players', need: 'hidePlayers' },
+  { key: 'players', label: 'Players', need: 'viewPlayers' },
+  { key: 'rules', label: 'Rules', need: 'manageRules' },
+  { key: 'access', label: 'Access', need: 'manageAccess' },
   { key: 'audit', label: 'Audit', need: 'viewReports' },
 ];
 
@@ -103,11 +121,11 @@ function siteChrome() {
       </nav>
       <div class="nav-right">
         <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">checking</span></div>
-        <div id="who"></div>
         <div class="search">
           <input class="search-input" id="q" type="text" placeholder="find player" autocomplete="off" spellcheck="false" aria-label="Find a player">
           <div class="search-results" id="qr"></div>
         </div>
+        <div id="who"></div>
       </div>
     </div>`;
 
@@ -126,9 +144,9 @@ function siteChrome() {
         <a href="/staff">Staff</a>
         <a href="/media">Media</a>
         <a href="/rules">Rules</a>
-        <a href="/apply">Apply</a>
-        <a href="/report">Report</a>
-        <a href="/appeal">Appeal</a>
+        <a href="/dashboard/applications">Apply</a>
+        <a href="/dashboard/reports">Report a player</a>
+        <a href="/dashboard/appeals">Appeal</a>
         <a href="/dashboard">Your dashboard</a>
         <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
       </div>
@@ -142,11 +160,10 @@ function siteChrome() {
 function playerChrome() {
   document.getElementById('nav').innerHTML = `
     <div class="hud-inner">
-      <a class="brand brand-back" href="/">
+      <a class="brand brand-back" href="/" title="Back to example.invalid">
         <img src="${LOGO}" alt="" onerror="this.style.display='none'">
         <span class="word">GRAVIJET</span>
       </a>
-      <div class="you" id="you"></div>
       <nav class="nav-links" id="ptabs">
         ${PLAYER_TABS.map(
           (t) => `<a href="/dashboard${t.key ? `/${t.key}` : ''}" data-match="/dashboard/${t.key}">${t.label}</a>`,
@@ -164,38 +181,18 @@ function playerChrome() {
         <a href="${DISCORD}" data-ext target="_blank" rel="noopener">Discord</a>
       </div>
     </div>`;
-
-  paintYou();
-}
-
-async function paintYou() {
-  const box = document.getElementById('you');
-  if (!box) return;
-  const me = await api.me().catch(() => ({ user: null }));
-  if (!box.isConnected) return;
-  if (!me.user) return void (box.innerHTML = '');
-
-  const mc = me.user.minecraft;
-  box.innerHTML = mc
-    ? `<img src="${head(mc.uuid, 40)}" alt="" onerror="this.onerror=null;this.src='${head(null, 40)}'">
-       <div class="you-id">
-         <span class="you-name">${esc(mc.name)}</span>
-         <span class="you-rank" style="color:${mc.ranks[0]?.color || '#aaaaaa'}">${esc(mc.ranks[0]?.name || 'Member')}</span>
-       </div>`
-    : `<div class="you-id">
-         <span class="you-name">${esc(me.user.discord.name)}</span>
-         <a class="you-rank you-link" href="/dashboard/account">no Minecraft account linked</a>
-       </div>`;
 }
 
 // ----------------------------------------------------------------- the staff
 
-// No dirt and no logo. This is not somewhere you arrive by accident, and dressing
-// it like the front page would invite reading it as one.
+// No dirt and no logo-as-marketing. This is not somewhere you arrive by
+// accident, and dressing it like the front page would invite reading it as one.
+// The mark still goes to example.invalid, because that is what a mark in that
+// corner does — a console you cannot leave by the obvious door is a trap.
 function staffChrome() {
   document.getElementById('nav').innerHTML = `
     <div class="hud-inner">
-      <a class="console-mark" href="/">
+      <a class="console-mark" href="${SITE || 'https://example.invalid'}/" ${SITE ? 'data-ext' : ''} title="Back to example.invalid">
         <span class="cm-name">SPIELPLATZ</span>
         <span class="cm-sub">staff console</span>
       </a>
@@ -236,7 +233,7 @@ export function markActive(path) {
   // segment, and on the player dashboard they are the second.
   let base;
   if (current === 'staff') base = `/${seg[0] || ''}`;
-  else if (current === 'player') base = `/dashboard/${seg[1] || ''}`;
+  else if (current === 'player') base = `/dashboard/${PLAYER_TAB_OF[seg[1]] || seg[1] || ''}`;
   else base = `/${seg[0] || ''}`;
 
   document.querySelectorAll('.nav-links a').forEach((a) => {
@@ -246,6 +243,48 @@ export function markActive(path) {
       m === base || (current === 'site' && base === '/player' && m === '/players'),
     );
   });
+}
+
+// --------------------------------------------------------------- the account
+
+// Everything about the signed-in person lives behind one avatar.
+//
+// It used to sit open in the strip: avatar, name, "You", "Console", and a close
+// button — five things, none of which are read twice, all competing with six
+// destinations and a search field for a row that was already full. Signed out
+// the header fit; signed in it ran over itself, which is exactly what it looked
+// like. The game does not solve this by shrinking the font: it puts the things
+// you rarely press behind a button and leaves the row to the things you do.
+function accountMenu(u) {
+  const doors = [];
+  if (current !== 'player') {
+    // "You" was the label, and it named nothing — it is the only word in the
+    // header that told you neither where you were going nor what was there.
+    doors.push(`<a class="am-item" href="${SITE}/dashboard" ${SITE ? 'data-ext' : ''}>Dashboard</a>`);
+  }
+  if (current !== 'staff' && u.staff) {
+    doors.push(`<a class="am-item" href="${CONSOLE_HOME}/" ${CONSOLE_HOME ? 'data-ext' : ''}>Spielplatz</a>`);
+  }
+  if (current !== 'site') doors.push(`<a class="am-item" href="${SITE || ''}/" ${SITE ? 'data-ext' : ''}>example.invalid</a>`);
+
+  const avatar = u.discord.avatar
+    ? `<img src="${u.discord.avatar}" alt="" width="24" height="24">`
+    : `<span class="am-blank"></span>`;
+
+  return `
+    <div class="acct">
+      <button class="acct-btn" id="acct-btn" aria-haspopup="menu" aria-expanded="false" title="${esc(u.discord.name)}">
+        ${avatar}<span class="acct-caret">▾</span>
+      </button>
+      <div class="acct-menu" id="acct-menu" role="menu" hidden>
+        <div class="am-head">
+          <span class="am-name">${esc(u.discord.name)}</span>
+          ${u.ranks.length ? `<span class="am-rank">${esc(u.ranks[0])}</span>` : '<span class="am-rank am-none">Member</span>'}
+        </div>
+        ${doors.join('')}
+        <button class="am-item am-out" id="logout">Sign out</button>
+      </div>
+    </div>`;
 }
 
 // Painted after the chrome rather than inside it, for the same reason as the
@@ -268,22 +307,37 @@ export async function paintWho() {
     return;
   }
 
-  const u = me.user;
-  // Each chrome offers the door to the other two, and never to itself.
-  const doors = [];
-  if (current !== 'player') doors.push(`<a class="wd" href="${SITE}/dashboard" ${SITE ? 'data-ext' : ''}>You</a>`);
-  if (current !== 'staff' && u.staff) {
-    doors.push(`<a class="wd" href="${CONSOLE_HOME}/" ${CONSOLE_HOME ? 'data-ext' : ''}>Console</a>`);
-  }
+  box.innerHTML = accountMenu(me.user);
+  wireAccount();
+}
 
-  box.innerHTML = `
-    <div class="who">
-      ${u.discord.avatar ? `<img src="${u.discord.avatar}" alt="" width="20" height="20">` : ''}
-      <span class="wn">${esc(u.discord.name)}</span>
-      ${current === 'staff' && u.ranks.length ? `<span class="wt">${esc(u.ranks[0])}</span>` : ''}
-      ${doors.join('')}
-      <button class="wo" id="logout" title="Sign out">×</button>
-    </div>`;
+function wireAccount() {
+  const btn = document.getElementById('acct-btn');
+  const menu = document.getElementById('acct-menu');
+  if (!btn || !menu) return;
+
+  const close = () => {
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  };
+  const toggle = () => {
+    const open = menu.hidden;
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggle();
+  });
+  // Anywhere else, and Escape. A menu that only closes by pressing the same
+  // button again is a menu you end up fighting.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.acct')) close();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
+  });
 
   const out = document.getElementById('logout');
   if (out) {

@@ -58,6 +58,15 @@ const site = {
   // table and speaks MySQL, so they live in `phoenixbridge`. See lib/links.
   hidden: () => collection(config.mongo.siteDb, 'hidden'),
   audit: () => collection(config.mongo.siteDb, 'audit'),
+  // The rulebook, once somebody has edited it. Absent until then — lib/rules
+  // ships the seed, and an empty collection means "nobody has changed it yet"
+  // rather than "there are no rules".
+  rules: () => collection(config.mongo.siteDb, 'rules'),
+  // Per-person overrides on top of the Discord-role tiers. See lib/staff.
+  access: () => collection(config.mongo.siteDb, 'access'),
+  // Screenshots attached to applications. The bytes are on disk; this is who
+  // sent them and who may read them. See routes/uploads.
+  uploads: () => collection(config.mongo.siteDb, 'uploads'),
 };
 
 async function ping() {

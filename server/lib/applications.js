@@ -20,10 +20,16 @@
 //     application that predicts anything, so it has three now, and the filler
 //     is gone. Twelve questions became eleven that each do work.
 //
-// `long: true` renders a textarea; the rest are single lines.
+// `long: true` renders a textarea; the rest are single lines. `upload: true`
+// additionally takes screenshots — see the builder and developer questions.
 
 const q = (text, long = true) => ({ text, long });
 const short = (text) => q(text, false);
+// A question you can answer with pictures as well as words. It still takes a
+// written answer: a wall of screenshots with no explanation of what we are
+// looking at is not an application, and links are still the better way to show
+// a whole portfolio.
+const withUpload = (text) => ({ text, long: true, upload: true });
 
 const IGN = short('What is your Minecraft in-game name?');
 const AGE = short('How old are you?');
@@ -57,7 +63,7 @@ const ROLES = {
       AGE,
       TZ,
       q('Why do you want to build for Gravijet?'),
-      q('Show us your work. Links only — imgur, Planet Minecraft, a video. No file uploads.'),
+      withUpload('Show us your work. Attach screenshots, or link a gallery, a Planet Minecraft page or a video — whichever shows it best.'),
       q('Of what you just linked, which did you build alone and which with other people?'),
       q('Which style are you strongest at, and which are you weakest at?'),
       q('Roughly how long does a mid-size build take you, start to finish?'),
