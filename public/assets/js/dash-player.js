@@ -134,10 +134,16 @@ function unlinkedCard() {
 
 // --- applications ----------------------------------------------------------
 
+// cancelled and timeout only ever came from the Discord bot's DM flow, which the
+// website's form has no equivalent of — you cannot half-send this one. They are
+// here because the old applications were imported, and a player looking at their
+// own history should see the word that was true at the time.
 const APP_STATUS = {
   pending: { label: 'Waiting on staff', cls: 'soon' },
   accepted: { label: 'Accepted', cls: 'live' },
   rejected: { label: 'Rejected', cls: 'dead' },
+  cancelled: { label: 'You cancelled it', cls: '' },
+  timeout: { label: 'Ran out of time', cls: '' },
 };
 
 async function paintApplications(body) {

@@ -168,6 +168,9 @@ async function paintQueue(body, can, me) {
 
 // --- applications ----------------------------------------------------------
 
+// "All" includes the six that came over from the Discord bot, and the statuses
+// the bot had that the website's own form cannot produce — cancelled, timeout —
+// which is why the list is not just pending/accepted/rejected.
 const APP_FILTERS = [
   { key: '', label: 'Waiting' },
   { key: 'accepted', label: 'Accepted' },
@@ -193,8 +196,18 @@ async function paintApplications(body, can) {
   wireApplications(body);
 }
 
+// Who ruled on it, said accurately. The applications imported from the bot kept
+// only the reviewer's Discord id, so claiming a name for them would be making
+// one up, and "unknown" reads like the record is broken when it isn't.
+function reviewer(a) {
+  if (a.reviewedBy?.name) return `by ${esc(a.reviewedBy.name)}`;
+  if (a.source === 'discord') return 'in Discord';
+  return 'by someone no longer on record';
+}
+
 function applicationCard(a, can) {
   const decided = a.status !== 'pending';
+  const cls = a.status === 'accepted' ? 'live' : a.status === 'rejected' ? 'dead' : 'soon';
   return `
     <section class="panel entry" data-id="${esc(a._id)}">
       <div class="panel-head">
@@ -203,10 +216,11 @@ function applicationCard(a, can) {
           <h3>${esc(a.roleLabel)} — ${esc(a.discordName)}</h3>
           <div class="ph-sub">
             sent ${timeAgo(a.submittedAt)}
-            ${decided ? ` · ${esc(a.status)} by ${esc(a.reviewedBy?.name || 'unknown')} ${timeAgo(a.reviewedAt)}` : ''}
+            ${decided ? ` · ${esc(a.status)} ${reviewer(a)}` : ''}
+            ${a.source === 'discord' ? ' · <span class="tagged">from the Discord bot</span>' : ''}
           </div>
         </div>
-        <div class="ph-right"><span class="badge ${a.status === 'accepted' ? 'live' : a.status === 'rejected' ? 'dead' : 'soon'}">${esc(a.status)}</span></div>
+        <div class="ph-right"><span class="badge ${cls}">${esc(a.status)}</span></div>
       </div>
       <div class="panel-body">
         <div class="qa">
