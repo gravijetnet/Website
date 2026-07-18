@@ -18,6 +18,7 @@ import { paintStaffTabs, STAFF_TABS } from './shell.js';
 import { esc, head, int, timeAgo, dateShort, playtime, dur } from './util.js';
 import { renderRulesEditor } from './dash-rules.js';
 import { renderAccess } from './dash-access.js';
+import { renderRanks, renderLadders } from './dash-network.js';
 
 const SITE = 'https://example.invalid';
 
@@ -69,6 +70,8 @@ export async function renderStaffDash(root, tab) {
     else if (active.key === 'appeals') await paintAppeals(body, can);
     else if (active.key === 'players') await paintPlayers(body, can);
     else if (active.key === 'rules') await renderRulesEditor(body, can);
+    else if (active.key === 'ranks') await renderRanks(body, can);
+    else if (active.key === 'ladders') await renderLadders(body, can);
     else if (active.key === 'access') await renderAccess(body, can);
     else if (active.key === 'audit') await paintAudit(body);
   } catch (err) {
@@ -508,6 +511,8 @@ function playerCard(p, can) {
 
         ${live ? `<div class="pwarn">Under ${live} live restriction${live === 1 ? '' : 's'} right now.</div>` : ''}
 
+        ${restrictionsBlock(p)}
+
         ${
           p.hidden
             ? `<div class="pwarn">Hidden from the public lists${p.hidden.by ? ` by ${esc(p.hidden.by)}` : ''} ${timeAgo(p.hidden.at)}${p.hidden.reason ? ` — ${esc(p.hidden.reason)}` : ''}.</div>`
@@ -573,6 +578,30 @@ function liveRevocable(p) {
   return p.punishments.filter((x) => x.live && x.appealable);
 }
 
+// What is on the player right now, and the one button that takes it off. This
+// sits high on the card — above the history and above the form for new ones —
+// because "unban this person" is a thing you come to the page already meaning to
+// do, and it should not be buried under the machinery for punishing them afresh.
+function restrictionsBlock(p) {
+  const live = liveRevocable(p);
+  if (!live.length) return '';
+  return `
+    <div class="block" id="restrictions">
+      <div class="block-label">Active restrictions</div>
+      <p class="rule-text">These are in force in game now. Lifting one takes effect immediately, through the core, and is recorded against your name.</p>
+      ${live
+        .map(
+          (x) => `<div class="factions revrow" data-revoke="${esc(x.id)}">
+            <span class="dr revwhat"><span class="rt ${/BAN|BLACKLIST/.test(String(x.type).toUpperCase()) ? 'hard' : ''}">${esc(x.type)}</span> ${esc(x.reason || 'no reason recorded')}</span>
+            <input class="fld fld-inline" placeholder="Why you're lifting it" maxlength="200">
+            <button class="btn btn-primary">${undoLabel(x.type)}</button>
+            <span class="fmsg revmsg"></span>
+          </div>`,
+        )
+        .join('')}
+    </div>`;
+}
+
 // Mute / kick / tempban / permban / blacklist, and lifting a live one. Durations
 // are named, not typed in milliseconds — a text box asking for "how many ms"
 // is how somebody bans for 30 seconds meaning 30 days.
@@ -586,7 +615,6 @@ const DURATIONS = [
 ];
 
 function punishBlock(p, can) {
-  const live = liveRevocable(p);
   return `
     <div class="block" id="punishblock">
       <div class="block-label">Punish</div>
@@ -609,22 +637,6 @@ function punishBlock(p, can) {
         <button class="btn btn-primary" id="pdo">Punish ${esc(p.name)}</button>
         <span class="fmsg" id="pmsg2"></span>
       </div>
-      ${
-        live.length
-          ? `<div class="block" style="margin-top:10px">
-               <div class="block-label">Lift a live punishment</div>
-               ${live
-                 .map(
-                   (x) => `<div class="factions" data-revoke="${esc(x.id)}">
-                     <span class="dr">${esc(x.type)} · ${esc(x.id)} · ${esc(x.reason || 'no reason')}</span>
-                     <input class="fld fld-inline" placeholder="Why you are lifting it" maxlength="200">
-                     <button class="btn">Lift</button>
-                   </div>`,
-                 )
-                 .join('')}
-             </div>`
-          : ''
-      }
     </div>`;
 }
 
@@ -693,24 +705,46 @@ function wirePlayerCard(body, card, p, can) {
 // do not claim success on a 202 — they watch the job until the plugin has
 // actually done it, and report what the game said. A ban that "worked" on the
 // website and failed in game is the one outcome staff must never be told is fine.
+// Every code the moderation and rank routes can return, each said as the reason
+// it actually is — the whole point of "say exactly why it did not work". A code
+// that reaches the fallback is one the server added without telling the panel;
+// keep this in step with server/routes/moderation.js.
 const PUNISH_ERR = {
-  target_is_staff: 'They outrank what you may punish from here.',
-  reason_required: 'A reason is required.',
-  duration_required: 'Pick a duration.',
-  duration_too_long: 'Longer than the core will accept.',
-  forbidden: 'Your rank does not cover that punishment.',
+  // shared
+  reason_required: 'A reason is required — the player and the next moderator both read it.',
+  forbidden: 'Your rank does not allow this.',
+  unknown_player: 'No player by that name. Check the spelling — it must be exact.',
   plugin_missing: 'The game-side plugin is not deployed yet, so this cannot reach the server.',
+  // punishing
+  bad_type: 'That is not a punishment the core understands.',
+  target_is_staff: 'They outrank what you may punish from here — only an Admin may.',
+  duration_required: 'Pick how long it lasts.',
+  duration_too_long: 'Longer than the core will accept (its ceiling is a year).',
+  punish_failed: 'The server errored while queuing it. Nothing was applied — try again.',
+  // lifting
+  unknown_punishment: 'That punishment is not on record any more.',
+  not_live: 'That punishment is not active any more — someone may have just lifted it.',
+  revoke_failed: 'The server errored while queuing the lift. Try again.',
+  // ranks
+  bad_mode: 'Choose promote or demote.',
+  rank_required: 'Pick a rank.',
+  unknown_rank: 'No such rank on the network.',
+  rank_too_high: 'That rank is at or above your own — you cannot hand out your own standing.',
+  rank_not_on_discord: 'That rank lives only in game (Owner and the purchase ranks), so it cannot be set from here.',
+  target_not_linked: 'They have not linked their Discord. They must /link in game first — a promotion here changes a Discord role, and there is none to change until they do.',
   bot_missing: 'The Discord bot has not been deployed with rank sync yet.',
-  unknown_player: 'No player by that name.',
-  rank_too_high: 'That rank is at or above your own.',
-  unknown_rank: 'No such rank.',
-  rank_not_on_discord: 'That rank has no Discord role, so it can only be granted in game.',
-  target_not_linked: 'They have not linked their Discord — they must /link before they can be promoted here.',
-  not_live: 'That punishment is not active any more.',
+  grant_failed: 'The server errored while asking the bot. Nothing changed — try again.',
 };
 
 function punishErr(err) {
   return PUNISH_ERR[err?.body?.error] || 'That did not go through.';
+}
+
+// A lift, named for the punishment it undoes: "Unmute" reads as the thing you
+// meant to do, where a generic "Lift" makes you stop and check what it lifts.
+const UNDO_LABEL = { MUTE: 'Unmute', BAN: 'Unban', BLACKLIST: 'Lift blacklist', WARN: 'Remove warning', KICK: 'Lift' };
+function undoLabel(type) {
+  return UNDO_LABEL[String(type).toUpperCase()] || 'Lift';
 }
 
 // Polls a queued job to its end. Resolves with the final row, or a timed-out
@@ -775,17 +809,22 @@ function wirePunish(card, p, refresh) {
 
   card.querySelectorAll('[data-revoke]').forEach((rowEl) => {
     const b = rowEl.querySelector('button');
+    const input = rowEl.querySelector('input');
+    const msg = rowEl.querySelector('.revmsg');
+    const say = (cls, text) => { if (msg) { msg.className = `fmsg ${cls}`.trim(); msg.textContent = text; } };
     b.addEventListener('click', async () => {
-      const reason = rowEl.querySelector('input').value.trim();
-      if (!reason) { rowEl.querySelector('input').focus(); return; }
+      const reason = input.value.trim();
+      if (!reason) { say('bad', 'Say why you are lifting it.'); input.focus(); return; }
       b.disabled = true;
+      say('', 'Lifting…');
       try {
         const { jobId } = await api.dash.revoke(rowEl.dataset.revoke, reason);
-        const row = await awaitJob(jobId, null);
-        if (row.status === 'done') setTimeout(refresh, 900);
+        const row = await awaitJob(jobId, msg);
+        if (reportJob(msg, row, 'Lifted — it is off them in game.')) setTimeout(refresh, 900);
         else b.disabled = false;
-      } catch {
+      } catch (err) {
         b.disabled = false;
+        say('bad', punishErr(err));
       }
     });
   });

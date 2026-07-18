@@ -205,10 +205,13 @@ h1, h2, h3, h4 { font-weight: 700; }
 .section { padding: 34px 0; }
 .section:nth-child(even) { background: rgba(0, 0, 0, 0.45); }
 
-/* Where a band can't reach — inside a panel, or between filters and their table
-   — a rule stands in. It sits on flat dark ground rather than on dirt, so it
-   needs far less light than the page-wide version did to register at all. */
-.rule { height: 2px; background: rgba(255, 255, 255, 0.13); }
+/* A thin divider where a band can't reach — inside a panel, or between filters
+   and their table. It sits on flat dark ground rather than on dirt, so it needs
+   far less light than the page-wide version to register. `.hr` and not `.rule`:
+   the rulebook's own entries are `.rule` (see the rules section far below), and
+   a shared name meant this 2px height was crushing every written rule into a
+   sliver with its text spilling out — the "rules overlap, unreadable" bug. */
+.hr { height: 2px; background: rgba(255, 255, 255, 0.13); }
 .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .section-head h2 { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
 .section-head p { color: var(--mc-gray); font-size: 16px; max-width: 44ch; text-shadow: 2px 2px 0 #2a2a2a; }
@@ -272,6 +275,23 @@ h1, h2, h3, h4 { font-weight: 700; }
 .nav-links a.active::before { opacity: 1; }
 
 .nav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
+
+/* The navigation tier — the second row under the identity strip. It carries the
+   destinations, the search and the live count, so the top row can be only the
+   brand and the account. A hairline above it, not a heavy border: it is one
+   header in two registers, not two separate bars stacked. */
+.subnav-inner {
+  width: 100%; max-width: var(--hud); margin: 0 auto; padding: 4px var(--gut) 6px;
+  display: flex; align-items: center; gap: 16px; min-height: 42px;
+  border-top: 2px solid rgba(255, 255, 255, 0.06);
+}
+.subnav-inner .nav-links { flex: 1 1 auto; }
+.subnav-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
+body[data-surface='player'] .subnav-inner,
+body[data-surface='staff'] .subnav-inner { border-top-color: rgba(255, 170, 0, 0.14); }
+/* An empty tab strip (a signed-out console, tabs not yet painted) should not
+   leave a bare rule floating under the mark. */
+.subnav-inner:has(.nav-links:empty) { border-top: 0; min-height: 0; padding: 0; }
 
 .live-pill { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
 .live-dot { width: 8px; height: 8px; background: var(--mc-dark-gray); }
@@ -663,12 +683,12 @@ body[data-surface='staff'] .nav-links a:hover { color: var(--mc-gold); text-shad
   border: 2px solid var(--slot-lo); background: #0d0d0d;
 }
 .rule-toc a:hover { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; border-color: var(--mc-white); }
-.rule-sec { scroll-margin-top: 68px; } /* the header is sticky and would eat the heading */
+.rule-sec { scroll-margin-top: 112px; } /* the two-tier header is sticky and would eat the heading */
 .rule-intro {
   color: var(--mc-gold); font-size: 16px; line-height: 1.5; text-shadow: 2px 2px 0 #3f2a00;
   max-width: 68ch; margin: 0 0 4px;
 }
-.rule { padding: 12px 0; border-bottom: 2px solid rgba(255, 255, 255, 0.07); scroll-margin-top: 68px; }
+.rule { padding: 12px 0; border-bottom: 2px solid rgba(255, 255, 255, 0.07); scroll-margin-top: 112px; }
 .rule:last-child { border-bottom: 0; padding-bottom: 0; }
 .rule-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
 .rule-head h4 { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
@@ -944,6 +964,11 @@ a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
 .fld-inline { width: auto; flex: 1; min-width: 140px; }
 #punishblock { border-left: 3px solid rgba(255, 85, 85, 0.4); padding-left: 12px; }
 #rankblock { border-left: 3px solid rgba(85, 255, 85, 0.35); padding-left: 12px; }
+/* Active restrictions sit above the punish form, marked in the amber the game
+   uses for "this is in force", so unmute/unban reads as the first thing here. */
+#restrictions { border-left: 3px solid rgba(255, 170, 0, 0.45); padding-left: 12px; }
+.revrow { margin-top: 10px; }
+.revwhat { flex: 1 1 220px; min-width: 0; }
 
 /* ------------------------------------------------------ the rules editor */
 .ed-bar {
@@ -981,3 +1006,70 @@ a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
 /* A box that no longer matches the rank default — an exception you have made. */
 .acc-over { border-color: rgba(255, 170, 0, 0.5); }
 .acc-item input[disabled] { opacity: 0.4; }
+
+/* --------------------------------------------------- the network editor */
+/* Ranks and ladders. The danger button — delete a rank, drop a rung — wears the
+   red the game keeps for the choices it wants you to hesitate over. */
+.btn-danger { background-color: #7a1f1f; border-color: var(--outline); }
+.btn-danger:hover { background-color: #9c2a2a; border-color: var(--mc-white); color: var(--mc-white); }
+.ls-del { min-height: 0; padding: 4px 10px; }
+
+/* Each rank is a drawer: shut, it is one legible row; open, it is its editor.
+   Native <details>, so it collapses without a line of script. */
+.rank-ed { border: 2px solid var(--slot-lo); background: #0d0d0d; margin-bottom: 8px; }
+.rank-ed[open] { border-color: var(--outline); }
+.rank-ed > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; user-select: none;
+}
+.rank-ed > summary::-webkit-details-marker { display: none; }
+.rank-ed > summary:hover { background: rgba(255, 255, 255, 0.04); }
+.rank-new { border-style: dashed; }
+.re-swatch { min-width: 90px; font-size: 16px; }
+.re-name { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.re-prio { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; margin-left: auto; }
+.re-tag {
+  font-size: 16px; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00;
+  border: 2px solid rgba(255, 170, 0, 0.35); padding: 0 6px; line-height: 1.35;
+}
+.re-tag.muted { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; border-color: var(--slot-lo); }
+.re-body { padding: 12px; border-top: 2px solid var(--slot-lo); display: flex; flex-direction: column; gap: 14px; }
+.re-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.re-field { display: flex; flex-direction: column; gap: 4px; }
+.re-field.re-inline { flex-direction: row; align-items: center; gap: 8px; }
+.re-lab { font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+.re-flags { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.re-flag { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+.re-hint { margin: 0; }
+.re-count { color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+
+.re-perms { display: flex; flex-direction: column; gap: 8px; }
+.permchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.permchip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 16px;
+  color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f;
+  background: rgba(0, 0, 0, 0.4); border: 2px solid var(--slot-lo); padding: 2px 4px 2px 8px;
+}
+.permx { border: 0; background: none; color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 4px; }
+.permx:hover { color: var(--mc-white); }
+.re-permadd { display: flex; gap: 8px; }
+.re-permadd .fld { flex: 1; min-width: 160px; }
+
+.re-inherit { display: flex; flex-direction: column; gap: 8px; }
+.inhrow { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.inhtog { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+
+/* A ladder rung as one editable line: which offence number, what it becomes, for
+   how long, how long it counts, and the two flags. */
+.lad-card { margin-bottom: 14px; }
+.lad-steps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+.lad-step {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px; border: 2px solid var(--slot-lo); background: rgba(0, 0, 0, 0.35);
+}
+.ls-n { min-width: 24px; text-align: center; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.lad-step .fld { width: auto; }
+.ls-num { width: 74px; }
+.ls-dur, .ls-decay { display: inline-flex; align-items: center; gap: 6px; }
+.ls-declab { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.ls-del { margin-left: auto; }

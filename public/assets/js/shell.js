@@ -78,6 +78,8 @@ export const STAFF_TABS = [
   { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
   { key: 'players', label: 'Players', need: 'viewPlayers' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
+  { key: 'ranks', label: 'Ranks', need: 'manageNetwork' },
+  { key: 'ladders', label: 'Ladders', need: 'manageNetwork' },
   { key: 'access', label: 'Access', need: 'manageAccess' },
   { key: 'audit', label: 'Audit', need: 'viewReports' },
 ];
@@ -110,22 +112,32 @@ export function surfaceFor(path) {
 // ------------------------------------------------------------------ the site
 
 function siteChrome() {
+  // Two tiers, not one crowded row. The top tier is only ever the two things the
+  // header is *about* — the mark that means "home" and the account that means
+  // "you". Everything you might go *do* — the six destinations, the search, the
+  // live count — drops to a navigation tier beneath it. The old strip made the
+  // brand, six links, a player count, a search field and the account fight over
+  // one 56px line; splitting the identity from the going-somewhere is what stops
+  // the fight, and it keeps every destination one visible button away on every
+  // page rather than hidden behind a menu.
   document.getElementById('nav').innerHTML = `
     <div class="hud-inner">
       <a class="brand" href="/">
         <img src="${LOGO}" alt="" onerror="this.style.display='none'">
         <span class="word">GRAVIJET <em>STATS</em></span>
       </a>
+      <div class="nav-right"><div id="who"></div></div>
+    </div>
+    <div class="subnav-inner">
       <nav class="nav-links">
         ${NAV.map((n) => `<a href="${n.href}" data-match="${n.match}">${n.label}</a>`).join('')}
       </nav>
-      <div class="nav-right">
+      <div class="subnav-right">
         <div class="live-pill" id="live-pill"><span class="live-dot"></span><span id="live-text">checking</span></div>
         <div class="search">
           <input class="search-input" id="q" type="text" placeholder="find player" autocomplete="off" spellcheck="false" aria-label="Find a player">
           <div class="search-results" id="qr"></div>
         </div>
-        <div id="who"></div>
       </div>
     </div>`;
 
@@ -158,18 +170,21 @@ function siteChrome() {
 // Painted empty and filled once /me answers: the chrome must not wait on a round
 // trip, and a header that arrives 200ms late is worse than one that fills in.
 function playerChrome() {
+  // Same two-tier shape as the site: the mark and you on top, your tabs beneath.
   document.getElementById('nav').innerHTML = `
     <div class="hud-inner">
       <a class="brand brand-back" href="/" title="Back to example.invalid">
         <img src="${LOGO}" alt="" onerror="this.style.display='none'">
         <span class="word">GRAVIJET</span>
       </a>
+      <div class="nav-right"><div id="who"></div></div>
+    </div>
+    <div class="subnav-inner">
       <nav class="nav-links" id="ptabs">
         ${PLAYER_TABS.map(
           (t) => `<a href="/dashboard${t.key ? `/${t.key}` : ''}" data-match="/dashboard/${t.key}">${t.label}</a>`,
         ).join('')}
       </nav>
-      <div class="nav-right"><div id="who"></div></div>
     </div>`;
 
   document.getElementById('footer').innerHTML = `
@@ -190,16 +205,18 @@ function playerChrome() {
 // The mark still goes to example.invalid, because that is what a mark in that
 // corner does — a console you cannot leave by the obvious door is a trap.
 function staffChrome() {
+  // Two tiers here too — and this surface needed it most: the console can carry
+  // eight tabs, which never fit beside the mark and the account on one line.
   document.getElementById('nav').innerHTML = `
     <div class="hud-inner">
       <a class="console-mark" href="${SITE || 'https://example.invalid'}/" ${SITE ? 'data-ext' : ''} title="Back to example.invalid">
         <span class="cm-name">SPIELPLATZ</span>
         <span class="cm-sub">staff dashboard</span>
       </a>
+      <div class="nav-right"><div id="who"></div></div>
+    </div>
+    <div class="subnav-inner">
       <nav class="nav-links" id="stabs"></nav>
-      <div class="nav-right">
-        <div id="who"></div>
-      </div>
     </div>`;
 
   document.getElementById('footer').innerHTML = `

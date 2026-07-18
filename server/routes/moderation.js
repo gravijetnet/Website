@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 
+const config = require('../config');
 const mongo = require('../lib/mongo');
 const staff = require('../lib/staff');
 const audit = require('../lib/audit');
@@ -59,6 +60,19 @@ async function actorUuid(req) {
 function label(req) {
   const d = req.session.discord;
   return `${d.globalName || d.username} (${d.id})`;
+}
+
+// Discord role names equal Phoenix rank names everywhere but two: Phoenix's Dev
+// and Tester are Discord's Developer and Beta-Tester. The bot's roleSync carries
+// the same two aliases (ROLE_KEY_TO_RANK) — keep them in step. Returns the
+// Discord role id that stands for a Phoenix rank, or null when the rank lives
+// only in game (Owner, and the purchase ranks) and so cannot be set from here.
+const DISCORD_RANK_ALIAS = { Developer: 'Dev', 'Beta-Tester': 'Tester' };
+function discordRoleForRank(rankName) {
+  for (const [roleName, id] of Object.entries(config.discord.rankRoles)) {
+    if ((DISCORD_RANK_ALIAS[roleName] || roleName) === rankName) return id;
+  }
+  return null;
 }
 
 // --- punishing --------------------------------------------------------------
@@ -217,8 +231,9 @@ router.post('/dash/grant', staff.requires('manageRanks'), json, async (req, res)
     if (!identity) return res.status(404).json({ error: 'unknown_player' });
 
     // The rank has to have a Discord role, or there is nothing for Discord — the
-    // source — to hold. Owner has none; it is granted in game, not from here.
-    if (!(rankName in config.discord.rankRoles)) {
+    // source — to hold. Owner and the purchase ranks have none; those are granted
+    // in game, not from here. Uses the alias map so Dev and Tester resolve.
+    if (!discordRoleForRank(rankName)) {
       return res.status(400).json({ error: 'rank_not_on_discord' });
     }
 

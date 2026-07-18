@@ -53,6 +53,11 @@ const NEEDS = {
   manageRules: 4,
   manageRanks: 4,
   manageAccess: 4,
+  // Editing the network's own configuration — the ranks themselves (colour,
+  // prefix, priority, permissions, inheritance) and the punishment ladders.
+  // This is the deepest thing the console can do: it changes what every player
+  // on the network is, not what one of them did. Admin, like the rest.
+  manageNetwork: 4,
 };
 
 // Shown in the Access editor, in the order they are worth reading. A bare key
@@ -72,6 +77,7 @@ const ABILITY_INFO = [
   { key: 'manageRules', label: 'Edit the rules', note: 'Changes what example.invalid/rules says.' },
   { key: 'manageRanks', label: 'Promote and demote', note: 'Grants and revokes ranks in game and in Discord.' },
   { key: 'manageAccess', label: 'Change who can do what', note: 'This page. Hand it out carefully.' },
+  { key: 'manageNetwork', label: 'Edit ranks and ladders', note: 'The network config itself — colours, prefixes, permissions, escalation. Applies in game.' },
 ];
 
 // Role ids -> rank names we know. An unknown role id is simply not a rank.

@@ -111,6 +111,14 @@ export const api = {
     resetRules: () => send('/dash/rules/reset', 'POST'),
     access: () => get('/dash/access'),
     setAccess: (id, grant, deny) => send(`/dash/access/${encodeURIComponent(id)}`, 'PUT', { grant, deny }),
+
+    // The network editor — ranks and ladders (routes/admin). Edits are queued
+    // for the plugin and watched to completion, the same as a punishment.
+    configRanks: () => get('/dash/config/ranks'),
+    configLadders: () => get('/dash/config/ladders'),
+    saveRank: (body) => send('/dash/config/rank', 'POST', body),
+    saveLadder: (body) => send('/dash/config/ladder', 'POST', body),
+    configAction: (id) => get(`/dash/config/action/${id}`),
   },
 
   health: () => get('/health'),
