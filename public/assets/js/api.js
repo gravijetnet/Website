@@ -119,6 +119,24 @@ export const api = {
     saveRank: (body) => send('/dash/config/rank', 'POST', body),
     saveLadder: (body) => send('/dash/config/ladder', 'POST', body),
     configAction: (id) => get(`/dash/config/action/${id}`),
+
+    // The report menu — the categories a player picks (routes/admin).
+    categories: () => get('/dash/config/categories'),
+    saveCategory: (body) => send('/dash/config/category', 'POST', body),
+
+    // Announcements to the game (routes/moderation).
+    broadcast: (kind, message) => send('/dash/broadcast', 'POST', { kind, message }),
+    broadcasts: () => get('/dash/broadcasts'),
+
+    // Everyone who has signed in (routes/admin).
+    users: () => get('/dash/users'),
+
+    // Config backups (routes/admin).
+    backups: () => get('/dash/backups'),
+    createBackup: (note) => send('/dash/backups', 'POST', { note }),
+    getBackup: (id) => get(`/dash/backups/${encodeURIComponent(id)}`),
+    deleteBackup: (id) => send(`/dash/backups/${encodeURIComponent(id)}`, 'DELETE'),
+    restoreBackup: (id) => send(`/dash/backups/${encodeURIComponent(id)}/restore`, 'POST'),
   },
 
   health: () => get('/health'),

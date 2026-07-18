@@ -42,6 +42,9 @@ const NEEDS = {
   resolveReports: 3,
   resolveAppeals: 3,
   hidePlayers: 3,
+  // Sending a message to everyone in game. A public act, so not a shift-one
+  // moderator's button — SrMod and up.
+  broadcast: 3,
   // Permanent bans and blacklists. Separated from punishPlayers because "this
   // person is done here" is a different decision from "cool off for an hour",
   // and it is the one nobody should be able to make by mis-clicking a dropdown.
@@ -71,6 +74,7 @@ const ABILITY_INFO = [
   { key: 'resolveReports', label: 'Close reports', note: null },
   { key: 'resolveAppeals', label: 'Rule on appeals', note: null },
   { key: 'hidePlayers', label: 'Hide players', note: 'Website only — removes them from leaderboards.' },
+  { key: 'broadcast', label: 'Broadcast to the network', note: 'Sends a message to everyone in game.' },
   { key: 'banPlayers', label: 'Ban permanently, blacklist', note: 'Takes effect in game immediately.' },
   { key: 'reviewApplications', label: 'Accept or reject applications', note: null },
   { key: 'manageStats', label: 'Manage stats', note: null },

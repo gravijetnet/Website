@@ -9,6 +9,9 @@ const staff = require('../lib/staff');
 const audit = require('../lib/audit');
 const rules = require('../lib/rules');
 const configActions = require('../lib/config-actions');
+const backups = require('../lib/backups');
+const links = require('../lib/links');
+const sql = require('../lib/sql');
 
 // The things Admin and above can change about the network itself, rather than
 // about one player: the rulebook, and who is allowed to do what.
@@ -420,19 +423,14 @@ router.post('/dash/config/rank', staff.requires('manageNetwork'), json, async (r
         if (f && String(f.value) !== String(spec.read(existing))) lines.push(f.line);
       }
 
-      // Permissions: desired vs current, as add/remove operations. A node can
-      // only be *added* by copying one that already exists on some rank — the API
-      // gives no way to mint one — so an add of a node that lives nowhere yet is
-      // refused here rather than sent to fail halfway through applying the rest.
+      // Permissions: desired vs current, as add/remove operations. A node already
+      // on some rank is added by copying that object; a node new to the whole
+      // network is minted plugin-side. Either way, any well-formed node is fair
+      // game here — the shape check is the only gate.
       if (Array.isArray(req.body.permissions)) {
-        const pool = new Set(docs.flatMap((d) => (d.permissions || []).map((p) => p.permission)).filter(Boolean));
         const want = new Set(req.body.permissions.map((p) => oneLine(p, 96)).filter((p) => PERM_RE.test(p)));
         const have = new Set((existing.permissions || []).map((p) => p.permission).filter(Boolean));
-        for (const node of want) {
-          if (have.has(node)) continue;
-          if (!pool.has(node)) return res.status(400).json({ error: 'perm_not_in_pool', detail: node });
-          lines.push(`perm+ ${node}`);
-        }
+        for (const node of want) if (!have.has(node)) lines.push(`perm+ ${node}`);
         for (const node of have) if (!want.has(node)) lines.push(`perm- ${node}`);
       }
 
@@ -549,6 +547,287 @@ router.get('/dash/config/action/:id', staff.requires('manageNetwork'), async (re
   } catch (err) {
     console.error('[dash config action]', err);
     res.status(500).json({ error: 'status_unavailable' });
+  }
+});
+
+// Turns a field spec + a value straight into a payload line — the write side of
+// RANK_FIELDS.read, used when re-applying a rank from a backup.
+function setLineFromValue(spec, value) {
+  if (spec.kind === 'int') return `set ${spec.field} ${Math.trunc(Number(value))}`;
+  if (spec.kind === 'bool') return `set ${spec.field} ${value === true}`;
+  return `set ${spec.field} ${oneLine(value, spec.max)}`;
+}
+
+// The ladder diff, shared by the ladder editor and a restore: what to change to
+// make `cur` look like `want`. Both are shapeLadderEditable shapes.
+function ladderDiffLines(want, cur) {
+  const lines = [];
+  if (want.priority !== cur.priority) lines.push(`set priority ${want.priority}`);
+  if (want.hidden !== cur.hidden) lines.push(`set hidden ${want.hidden}`);
+  const curByOrder = new Map(cur.steps.map((s) => [s.order, s]));
+  const wantOrders = new Set();
+  for (const s of want.steps) {
+    wantOrders.add(s.order);
+    const now = curByOrder.get(s.order);
+    if (!now) continue; // a restore cannot add a rung the live ladder lacks
+    if (s.type !== now.type) lines.push(`step ${s.order} type ${s.type}`);
+    if (s.duration !== now.duration) lines.push(`step ${s.order} duration ${s.duration}`);
+    if (s.decay !== now.decay) lines.push(`step ${s.order} decay ${s.decay}`);
+    if (s.ip !== now.ip) lines.push(`step ${s.order} ip ${s.ip}`);
+    if (s.shadow !== now.shadow) lines.push(`step ${s.order} shadow ${s.shadow}`);
+  }
+  for (const s of cur.steps) if (!wantOrders.has(s.order)) lines.push(`stepdel ${s.order}`);
+  return lines;
+}
+
+// --- the report menu (categories) ------------------------------------------
+//
+// Phoenix has no API for the report categories, so — with the owner's go-ahead
+// to take the risk — these are edited straight in Mongo. The site's own report
+// form reads the same collection, so a change shows there at once; the in-game
+// /report menu reads it at startup, so it shows there on the next restart.
+
+// Sensible icons for a 1.8-era GUI, so nobody has to recall that a player head
+// is SKULL_ITEM. Free text is still accepted — this is a shortcut, not a fence.
+const MATERIALS = [
+  'PAPER', 'BOOK', 'WRITTEN_BOOK', 'MAP', 'NAME_TAG', 'SKULL_ITEM', 'BARRIER', 'REDSTONE',
+  'TNT', 'IRON_SWORD', 'DIAMOND_SWORD', 'BOW', 'FISHING_ROD', 'COMPASS', 'WATCH', 'SIGN',
+  'CHEST', 'ANVIL', 'BLAZE_ROD', 'NETHER_STAR', 'EMERALD', 'GOLD_INGOT', 'BEDROCK', 'WEB',
+];
+
+const CAT_NAME = /^[A-Za-z0-9 _/-]{1,64}$/;
+const MAT_RE = /^[A-Z0-9_]{1,48}$/;
+
+router.get('/dash/config/categories', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    const [cats, ladders] = await Promise.all([
+      (await mongo.phoenix.reportCategories()).find({}).toArray(),
+      (await mongo.phoenix.punishmentLadders()).find({}, { projection: { _id: 1 } }).toArray(),
+    ]);
+    res.json({
+      categories: cats
+        .map((c) => ({
+          id: c._id,
+          displayName: c.displayName || '',
+          description: Array.isArray(c.description) ? c.description : [],
+          punishmentLadderId: c.punishmentLadderId || '',
+          materialName: c.materialName || 'PAPER',
+        }))
+        .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+      ladders: ladders.map((l) => l._id).sort(),
+      materials: MATERIALS,
+    });
+  } catch (err) {
+    console.error('[dash categories]', err);
+    res.status(500).json({ error: 'categories_unavailable' });
+  }
+});
+
+router.post('/dash/config/category', staff.requires('manageNetwork'), json, async (req, res) => {
+  const op = String(req.body?.op || '');
+  if (!['create', 'update', 'delete'].includes(op)) return res.status(400).json({ error: 'bad_op' });
+  const name = oneLine(req.body?.name, 64);
+  if (!name || !CAT_NAME.test(name)) return res.status(400).json({ error: 'bad_name' });
+
+  try {
+    const col = await mongo.phoenix.reportCategories();
+    const existing = await col.findOne({ _id: name });
+
+    if (op === 'delete') {
+      if (!existing) return res.status(404).json({ error: 'unknown_category' });
+      await col.deleteOne({ _id: name });
+      await audit.record(req, 'reportmenu.delete', name);
+      return res.json({ ok: true });
+    }
+    if (op === 'create' && existing) return res.status(409).json({ error: 'category_exists' });
+    if (op === 'update' && !existing) return res.status(404).json({ error: 'unknown_category' });
+
+    const displayName = oneLine(req.body?.displayName, 64);
+    if (!displayName) return res.status(400).json({ error: 'displayname_required' });
+    const materialName = oneLine(req.body?.materialName, 48).toUpperCase();
+    if (!MAT_RE.test(materialName)) return res.status(400).json({ error: 'bad_material' });
+    const ladderId = oneLine(req.body?.punishmentLadderId, 64);
+    if (ladderId && !(await (await mongo.phoenix.punishmentLadders()).findOne({ _id: ladderId }))) {
+      return res.status(400).json({ error: 'unknown_ladder' });
+    }
+    const description = (Array.isArray(req.body?.description) ? req.body.description : [])
+      .map((s) => oneLine(s, 100))
+      .filter(Boolean)
+      .slice(0, 10);
+
+    await col.replaceOne(
+      { _id: name },
+      { _id: name, displayName, description, punishmentLadderId: ladderId, materialName },
+      { upsert: true },
+    );
+    await audit.record(req, `reportmenu.${op}`, name, { displayName, ladder: ladderId, material: materialName });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[dash category]', err);
+    res.status(500).json({ error: 'category_failed' });
+  }
+});
+
+// --- everyone who has signed in --------------------------------------------
+//
+// The website holds no member list of its own — the only record of who exists to
+// it is who has logged in, i.e. the sessions. One row per Discord id, freshest
+// session wins, joined to the Minecraft account they have linked if any.
+router.get('/dash/users', staff.requires('viewPlayers'), async (req, res) => {
+  try {
+    const sessions = await (await mongo.collection(config.mongo.siteDb, 'sessions')).find({}).toArray();
+    const byId = new Map();
+    for (const s of sessions) {
+      if (!s.discord?.id) continue;
+      const seen = s.rolesAt || s.createdAt || 0;
+      const prev = byId.get(s.discord.id);
+      if (prev && (prev.lastSeen || 0) >= seen) continue;
+      byId.set(s.discord.id, {
+        id: s.discord.id,
+        name: s.discord.globalName || s.discord.username,
+        avatar: s.discord.avatar || null,
+        roles: s.roles || [],
+        lastSeen: seen,
+        since: s.createdAt || null,
+      });
+    }
+
+    let linkByDiscord = new Map();
+    try {
+      const rows = await sql.query('phoenix', 'SELECT `discord_id`, `uuid`, `name`, `linked_at` FROM `account_links`');
+      linkByDiscord = new Map(rows.map((r) => [r.discord_id, { uuid: r.uuid, name: r.name, at: r.linked_at }]));
+    } catch { /* the table may not exist yet; no links is a fine answer */ }
+
+    const users = [...byId.values()]
+      .map((u) => {
+        const ranks = staff.ranksFromRoles(u.roles);
+        return {
+          id: u.id,
+          name: u.name,
+          avatar: u.avatar,
+          ranks,
+          tier: staff.tierOf(ranks),
+          linked: linkByDiscord.get(u.id) || null,
+          lastSeen: u.lastSeen || null,
+          since: u.since,
+        };
+      })
+      .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+
+    res.json({ users, count: users.length });
+  } catch (err) {
+    console.error('[dash users]', err);
+    res.status(500).json({ error: 'users_unavailable' });
+  }
+});
+
+// --- backups ---------------------------------------------------------------
+
+router.get('/dash/backups', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    res.json({ backups: await backups.list() });
+  } catch (err) {
+    console.error('[dash backups]', err);
+    res.status(500).json({ error: 'backups_unavailable' });
+  }
+});
+
+router.post('/dash/backups', staff.requires('manageNetwork'), json, async (req, res) => {
+  try {
+    const doc = await backups.create(audit.actor(req), oneLine(req.body?.note, 200));
+    await audit.record(req, 'backup.create', doc._id, { counts: doc.counts });
+    res.status(201).json({ ok: true, id: doc._id, counts: doc.counts, at: doc.at });
+  } catch (err) {
+    console.error('[dash backup create]', err);
+    res.status(500).json({ error: 'backup_failed' });
+  }
+});
+
+router.get('/dash/backups/:id', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    const b = await backups.get(req.params.id);
+    if (!b) return res.status(404).json({ error: 'not_found' });
+    res.json(b);
+  } catch (err) {
+    console.error('[dash backup get]', err);
+    res.status(500).json({ error: 'backup_unavailable' });
+  }
+});
+
+router.delete('/dash/backups/:id', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    if (!(await backups.remove(req.params.id))) return res.status(404).json({ error: 'not_found' });
+    await audit.record(req, 'backup.delete', req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[dash backup del]', err);
+    res.status(500).json({ error: 'delete_failed' });
+  }
+});
+
+// Re-apply a backup. Rules and the report menu are ours, so they go back at once.
+// Ranks and ladders go through the queue: their display, flags and rungs are
+// restored on the ranks/ladders that still exist. A restore does not recreate a
+// deleted rank or remove one added since — undo, not a destructive rollback —
+// and rank permissions/inheritance are in the download for a manual re-apply
+// rather than re-diffed here.
+router.post('/dash/backups/:id/restore', staff.requires('manageNetwork'), json, async (req, res) => {
+  try {
+    const b = await backups.get(req.params.id);
+    if (!b) return res.status(404).json({ error: 'not_found' });
+    const data = b.data || {};
+    const summary = { rules: false, categories: 0, rankJobs: 0, ladderJobs: 0 };
+
+    if (Array.isArray(data.rules)) {
+      try {
+        await rules.save(data.rules, audit.actor(req));
+        require('../lib/cache').invalidate();
+        summary.rules = true;
+      } catch { /* a bad rules blob must not sink the rest of the restore */ }
+    }
+
+    if (Array.isArray(data.categories)) {
+      const col = await mongo.phoenix.reportCategories();
+      await col.deleteMany({});
+      if (data.categories.length) await col.insertMany(data.categories);
+      summary.categories = data.categories.length;
+    }
+
+    const curRanks = await (await mongo.phoenix.ranks()).find({}).toArray();
+    const curByName = new Map(curRanks.map((d) => [d.name, d]));
+    for (const br of data.ranks || []) {
+      const cur = curByName.get(br.name);
+      if (!cur) continue;
+      if (Number(cur.priority) >= OWNER_FLOOR && req.staff.tier < staff.TIER.Management) continue;
+      const lines = [];
+      for (const spec of RANK_FIELDS) {
+        const bv = spec.read(br);
+        if (String(bv) !== String(spec.read(cur))) lines.push(setLineFromValue(spec, bv));
+      }
+      if (lines.length) {
+        await configActions.enqueue({ action: 'rank_update', subject: br.name, payload: lines.join('\n'), actorUuid: null, actorLabel: actorLabel(req) });
+        summary.rankJobs++;
+      }
+    }
+
+    const curLadders = await (await mongo.phoenix.punishmentLadders()).find({}).toArray();
+    const curLadderById = new Map(curLadders.map((d) => [d._id, shapeLadderEditable(d)]));
+    for (const bl of data.ladders || []) {
+      const cur = curLadderById.get(bl._id);
+      if (!cur) continue;
+      const lines = ladderDiffLines(shapeLadderEditable(bl), cur);
+      if (lines.length) {
+        await configActions.enqueue({ action: 'ladder_update', subject: bl._id, payload: lines.join('\n'), actorUuid: null, actorLabel: actorLabel(req) });
+        summary.ladderJobs++;
+      }
+    }
+
+    await audit.record(req, 'backup.restore', b._id, summary);
+    res.json({ ok: true, summary });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash backup restore]', err);
+    res.status(500).json({ error: 'restore_failed' });
   }
 });
 

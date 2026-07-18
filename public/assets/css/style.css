@@ -1073,3 +1073,33 @@ a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
 .ls-dur, .ls-decay { display: inline-flex; align-items: center; gap: 6px; }
 .ls-declab { font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
 .ls-del { margin-left: auto; }
+.lad-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+
+/* --------------------------------------------------- roll-out cards */
+/* Shut, a card is one legible line — a name and enough to tell it apart; open,
+   its whole body. Native <details>, the same gesture as the ranks editor, worn
+   by reports, appeals, applications, ladders, access, the report menu and
+   backups so a long list is a list, not a wall. */
+.card-roll > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; user-select: none;
+}
+.card-roll > summary::-webkit-details-marker { display: none; }
+.card-roll > summary:hover { background: rgba(255, 255, 255, 0.03); }
+.card-roll[open] > summary { border-bottom: 2px solid var(--outline); background: rgba(0, 0, 0, 0.4); }
+.cs-name { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.cs-meta { margin-left: auto; font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a; }
+.panel-body .ph-sub { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; margin-bottom: 8px; }
+.badge.dead { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+
+/* --------------------------------------------------- users + broadcast */
+.uav { width: 40px; height: 40px; flex-shrink: 0; }
+.uav-blank { background: var(--slot-lo); display: inline-block; }
+.utag {
+  font-size: 16px; color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15;
+  border: 2px solid rgba(255, 170, 0, 0.3); padding: 0 5px; margin-left: 4px;
+}
+.bcprev {
+  min-height: 30px; padding: 8px 10px; margin: 8px 0;
+  border: 2px solid var(--slot-lo); background: #000; font-size: 16px;
+}

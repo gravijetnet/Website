@@ -67,6 +67,9 @@ const site = {
   // Screenshots attached to applications. The bytes are on disk; this is who
   // sent them and who may read them. See routes/uploads.
   uploads: () => collection(config.mongo.siteDb, 'uploads'),
+  // Point-in-time copies of the network config (ranks, ladders, report menu,
+  // rules) so a bad edit has an undo. See lib/backups.
+  backups: () => collection(config.mongo.siteDb, 'backups'),
 };
 
 async function ping() {

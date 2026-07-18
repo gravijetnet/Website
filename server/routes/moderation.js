@@ -9,6 +9,7 @@ const staff = require('../lib/staff');
 const audit = require('../lib/audit');
 const links = require('../lib/links');
 const actions = require('../lib/actions');
+const broadcasts = require('../lib/broadcasts');
 const discordtasks = require('../lib/discordtasks');
 const playersLib = require('../lib/players');
 const phoenix = require('../lib/phoenix');
@@ -284,6 +285,38 @@ router.post('/dash/grant', staff.requires('manageRanks'), json, async (req, res)
     if (err.code === 'not_installed') return res.status(503).json({ error: 'bot_missing' });
     console.error('[dash grant]', err);
     res.status(500).json({ error: 'grant_failed' });
+  }
+});
+
+// --- broadcasting -----------------------------------------------------------
+
+// A message to everyone in game (or everyone on staff). The plugin fans it out
+// to every server; this only writes it down and records who sent it.
+router.post('/dash/broadcast', staff.requires('broadcast'), json, async (req, res) => {
+  const kind = String(req.body?.kind || 'all');
+  if (!broadcasts.KINDS.has(kind)) return res.status(400).json({ error: 'bad_kind' });
+
+  const message = String(req.body?.message || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 512);
+  if (!message) return res.status(400).json({ error: 'message_required' });
+
+  try {
+    const id = await broadcasts.enqueue({ kind, message, actorLabel: label(req) });
+    await audit.record(req, `broadcast.${kind}`, 'network', { message, id });
+    res.status(202).json({ ok: true, id });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash broadcast]', err);
+    res.status(500).json({ error: 'broadcast_failed' });
+  }
+});
+
+router.get('/dash/broadcasts', staff.requires('broadcast'), async (req, res) => {
+  try {
+    const list = await broadcasts.recent(20);
+    res.json({ installed: list !== null, broadcasts: list || [] });
+  } catch (err) {
+    console.error('[dash broadcasts]', err);
+    res.status(500).json({ error: 'broadcasts_unavailable' });
   }
 });
 

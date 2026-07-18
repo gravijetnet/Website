@@ -12,7 +12,7 @@
 // the few operations that actually changed, so a Save that only recoloured a
 // rank queues one operation, not thirteen.
 import { api } from './api.js';
-import { esc, dur } from './util.js';
+import { esc, dur, timeAgo, dateShort } from './util.js';
 import { pageLoader, notice } from './components.js';
 
 // --- Minecraft colour codes, rendered ---------------------------------------
@@ -25,8 +25,9 @@ const MC = {
 };
 
 // A faithful-enough preview of a legacy colour string. Not a chat renderer — it
-// only needs to make a prefix legible and show what a colour code does.
-function mcPreview(raw) {
+// only needs to make a prefix legible and show what a colour code does. Exported
+// because a broadcast and a report category read the same &-codes.
+export function mcPreview(raw) {
   const s = String(raw || '');
   let out = '';
   let color = '#ffffff';
@@ -80,6 +81,11 @@ const CFG_ERR = {
   bad_step_decay: 'A step decay must be zero or more milliseconds.',
   plugin_missing: 'The game-side plugin is not deployed yet, so this cannot reach the network.',
   forbidden: 'Your rank does not allow this.',
+  // report menu
+  displayname_required: 'Give the category a display name.',
+  bad_material: 'That is not a valid material name.',
+  category_exists: 'A category with that name already exists.',
+  unknown_category: 'No category by that name.',
 };
 
 function cfgErr(err) {
@@ -197,7 +203,7 @@ function permEditor(r, pool) {
         <input class="fld" list="permpool" data-permadd placeholder="core.command.something" maxlength="96">
         <button class="btn" type="button" data-permaddbtn>Add</button>
       </div>
-      <p class="rule-text re-hint">A node no rank uses yet can only be added in game first — then it will copy here.</p>
+      <p class="rule-text re-hint">Type any node — the list suggests ones already in use, but a brand-new one is created too.</p>
     </div>`;
 }
 
@@ -433,25 +439,25 @@ function stepRow(s, types) {
 
 function ladderCard(l, types) {
   return `
-    <section class="panel entry lad-card" data-ladder="${esc(l.id)}">
-      <div class="panel-head">
-        <div>
-          <h3>${esc(l.reason)} <span class="dr">(${esc(l.id)})</span></h3>
-          <div class="ph-sub">${l.steps.length} rung${l.steps.length === 1 ? '' : 's'}${l.requireChatSnapshot ? ' · needs a chat snapshot' : ''}</div>
-        </div>
-        <div class="ph-right">
+    <details class="panel entry lad-card card-roll" data-ladder="${esc(l.id)}">
+      <summary class="card-sum">
+        <span class="cs-name">${esc(l.reason)}</span>
+        <span class="dr">${esc(l.id)}</span>
+        <span class="cs-meta">${l.steps.length} rung${l.steps.length === 1 ? '' : 's'}${l.hidden ? ' · hidden' : ''}</span>
+      </summary>
+      <div class="panel-body">
+        <div class="lad-head">
           <label class="re-field re-inline"><span class="re-lab">Priority</span><input class="fld ls-num" type="number" data-ladprio value="${l.priority}"></label>
           <label class="pcheck"><input type="checkbox" data-ladhidden ${l.hidden ? 'checked' : ''}> Hidden</label>
+          ${l.requireChatSnapshot ? '<span class="dr">needs a chat snapshot</span>' : ''}
         </div>
-      </div>
-      <div class="panel-body">
         <div class="lad-steps">${l.steps.map((s) => stepRow(s, types)).join('')}</div>
         <div class="factions">
           <button class="btn btn-primary" data-ladsave>Save ${esc(l.id)}</button>
           <span class="fmsg" data-msg></span>
         </div>
       </div>
-    </section>`;
+    </details>`;
 }
 
 function unitToMs(n, u) {
@@ -494,6 +500,227 @@ function wireLadders(root, ladders) {
       } finally {
         btn.disabled = false;
       }
+    });
+  });
+}
+
+// ======================================================= report menu ========
+
+// The categories a player picks when reporting — one list, shared by the in-game
+// /report menu and the site's own report form. Phoenix has no API for these, so
+// they are edited straight in the store; the site form reads it live, the game
+// menu at startup. Instant, no queued job to watch.
+
+export async function renderReportMenu(root) {
+  root.innerHTML = pageLoader();
+  let data;
+  try {
+    data = await api.dash.categories();
+  } catch {
+    root.innerHTML = notice('Report menu unavailable', 'Could not read the report categories from the core.');
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="section-head">
+      <div>
+        <h2>Report menu</h2>
+        <p>The categories a player picks when reporting — the same list in game and on the site. A change shows on the site at once; the in-game menu picks it up on each server’s next restart.</p>
+      </div>
+    </div>
+    <details class="rank-ed rank-new">
+      <summary><span class="re-name">＋ New category</span></summary>
+      <div class="re-body" id="newcat">${categoryFields(null)}
+        <label class="re-field"><span class="re-lab">Name — the key it is stored under</span><input class="fld" data-catname placeholder="Cheating" maxlength="64"></label>
+        <div class="factions"><button class="btn btn-primary" data-catcreate>Create category</button><span class="fmsg" data-msg></span></div>
+      </div>
+    </details>
+    <div id="catlist">${data.categories.map(categoryCard).join('') || '<div class="empty">No report categories.</div>'}</div>
+    <datalist id="matpool">${data.materials.map((m) => `<option value="${esc(m)}">`).join('')}</datalist>
+    <datalist id="ladpool">${data.ladders.map((l) => `<option value="${esc(l)}">`).join('')}</datalist>`;
+
+  wireReportMenu(root);
+}
+
+function categoryFields(c) {
+  const desc = (c && Array.isArray(c.description) ? c.description : []).join('\n');
+  return `
+    <label class="re-field"><span class="re-lab">Display name</span><input class="fld" data-dn value="${esc(c ? c.displayName : '')}" placeholder="&cCheating" maxlength="64"></label>
+    <div class="re-grid">
+      <label class="re-field"><span class="re-lab">Icon material</span><input class="fld" list="matpool" data-mat value="${esc(c ? c.materialName : 'PAPER')}" maxlength="48"></label>
+      <label class="re-field"><span class="re-lab">Links to ladder</span><input class="fld" list="ladpool" data-lad value="${esc(c ? c.punishmentLadderId : '')}" placeholder="(optional)" maxlength="64"></label>
+    </div>
+    <label class="re-field"><span class="re-lab">Description — one lore line each</span><textarea class="fld" data-desc rows="3" placeholder="Shown under the icon in the menu">${esc(desc)}</textarea></label>`;
+}
+
+function categoryCard(c) {
+  return `
+    <details class="rank-ed" data-cat="${esc(c.id)}">
+      <summary>
+        <span class="re-swatch">${mcPreview(c.displayName || c.id)}</span>
+        <span class="re-name">${esc(c.id)}</span>
+        ${c.punishmentLadderId ? `<span class="re-tag">→ ${esc(c.punishmentLadderId)}</span>` : ''}
+        <span class="re-prio">${esc(c.materialName)}</span>
+      </summary>
+      <div class="re-body">
+        ${categoryFields(c)}
+        <div class="factions">
+          <button class="btn btn-primary" data-catsave>Save</button>
+          <button class="btn btn-danger" data-catdel>Delete</button>
+          <span class="fmsg" data-msg></span>
+        </div>
+      </div>
+    </details>`;
+}
+
+function readCategory(box) {
+  return {
+    displayName: box.querySelector('[data-dn]').value,
+    materialName: box.querySelector('[data-mat]').value,
+    punishmentLadderId: box.querySelector('[data-lad]').value,
+    description: box.querySelector('[data-desc]').value.split('\n').map((s) => s.trim()).filter(Boolean),
+  };
+}
+
+function wireReportMenu(root) {
+  // Live preview of the display name, everywhere it is edited.
+  root.querySelectorAll('.rank-ed').forEach((card) => {
+    const dn = card.querySelector('[data-dn]');
+    const sw = card.querySelector('.re-swatch');
+    if (dn && sw) dn.addEventListener('input', () => (sw.innerHTML = mcPreview(dn.value)));
+  });
+
+  root.querySelectorAll('#catlist .rank-ed').forEach((card) => {
+    const name = card.dataset.cat;
+    const msg = card.querySelector('[data-msg]');
+    card.querySelector('[data-catsave]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Saving…';
+      try {
+        await api.dash.saveCategory({ op: 'update', name, ...readCategory(card) });
+        msg.className = 'fmsg ok'; msg.textContent = 'Saved. Live on the site now; in game on the next restart.';
+      } catch (err) { msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+      finally { btn.disabled = false; }
+    });
+    card.querySelector('[data-catdel]').addEventListener('click', async (e) => {
+      if (!confirm(`Delete the report category "${name}"?`)) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try { await api.dash.saveCategory({ op: 'delete', name }); card.remove(); }
+      catch (err) { btn.disabled = false; msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+    });
+  });
+
+  const nc = root.querySelector('#newcat');
+  const cmsg = nc.querySelector('[data-msg]');
+  nc.querySelector('[data-catcreate]').addEventListener('click', async (e) => {
+    const name = nc.querySelector('[data-catname]').value.trim();
+    if (!name) { cmsg.className = 'fmsg bad'; cmsg.textContent = 'Give it a name.'; return; }
+    const btn = e.currentTarget;
+    btn.disabled = true; cmsg.className = 'fmsg'; cmsg.textContent = 'Creating…';
+    try {
+      await api.dash.saveCategory({ op: 'create', name, ...readCategory(nc) });
+      setTimeout(() => renderReportMenu(root), 700);
+    } catch (err) { btn.disabled = false; cmsg.className = 'fmsg bad'; cmsg.textContent = cfgErr(err); }
+  });
+}
+
+// ========================================================== backups =========
+
+export async function renderBackups(root) {
+  root.innerHTML = pageLoader();
+  let data;
+  try {
+    data = await api.dash.backups();
+  } catch {
+    root.innerHTML = notice('Backups unavailable', 'Could not read the backups.');
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="section-head">
+      <div>
+        <h2>Backups</h2>
+        <p>A copy of the whole network config — ranks, ladders, the report menu and the rules — to keep, download, or roll back to.</p>
+      </div>
+    </div>
+    <section class="panel entry"><div class="panel-body">
+      <label class="re-field"><span class="re-lab">Note — optional, so future-you knows why</span><input class="fld" id="bknote" placeholder="Before the rank overhaul" maxlength="200"></label>
+      <div class="factions"><button class="btn btn-primary" id="bkmake">Take a backup now</button><span class="fmsg" id="bkmsg"></span></div>
+    </div></section>
+    <div id="bklist">${data.backups.map(backupCard).join('') || '<div class="empty">No backups yet.</div>'}</div>`;
+
+  wireBackups(root);
+}
+
+function backupCard(b) {
+  const c = b.counts || {};
+  return `
+    <details class="rank-ed" data-backup="${esc(b._id)}">
+      <summary>
+        <span class="re-name">${esc(dateShort(b.at))}</span>
+        <span class="dr">${timeAgo(b.at)}${b.note ? ` · ${esc(b.note)}` : ''}</span>
+        <span class="re-prio">${c.ranks || 0} ranks · ${c.ladders || 0} ladders · ${c.categories || 0} categories · ${c.rules || 0} rule sets</span>
+      </summary>
+      <div class="re-body">
+        <p class="rule-text">Taken by ${esc(b.by?.name || 'unknown')}.</p>
+        <div class="factions">
+          <button class="btn" data-download>Download JSON</button>
+          <button class="btn btn-primary" data-restore>Restore</button>
+          <button class="btn btn-danger" data-delbk>Delete</button>
+          <span class="fmsg" data-msg></span>
+        </div>
+        <p class="rule-text re-hint">Restore re-applies rank display and flags, the ladders, the report menu and the rules in game. It does not recreate a deleted rank or remove one added since. Rank permissions and inheritance are kept in the download for a manual re-apply.</p>
+      </div>
+    </details>`;
+}
+
+function wireBackups(root) {
+  const make = root.querySelector('#bkmake');
+  const mmsg = root.querySelector('#bkmsg');
+  make.addEventListener('click', async () => {
+    make.disabled = true; mmsg.className = 'fmsg'; mmsg.textContent = 'Capturing…';
+    try {
+      await api.dash.createBackup(root.querySelector('#bknote').value.trim());
+      setTimeout(() => renderBackups(root), 500);
+    } catch { make.disabled = false; mmsg.className = 'fmsg bad'; mmsg.textContent = 'That did not save.'; }
+  });
+
+  root.querySelectorAll('#bklist .rank-ed').forEach((card) => {
+    const id = card.dataset.backup;
+    const msg = card.querySelector('[data-msg]');
+
+    card.querySelector('[data-download]').addEventListener('click', async () => {
+      msg.className = 'fmsg'; msg.textContent = 'Preparing…';
+      try {
+        const full = await api.dash.getBackup(id);
+        const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${id}.json`; a.click();
+        URL.revokeObjectURL(url);
+        msg.className = 'fmsg ok'; msg.textContent = 'Downloaded.';
+      } catch { msg.className = 'fmsg bad'; msg.textContent = 'Could not fetch it.'; }
+    });
+
+    card.querySelector('[data-restore]').addEventListener('click', async (e) => {
+      if (!confirm('Restore this backup? It re-applies its ranks, ladders, report menu and rules in game.')) return;
+      const btn = e.currentTarget;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Restoring…';
+      try {
+        const { summary } = await api.dash.restoreBackup(id);
+        msg.className = 'fmsg ok';
+        msg.textContent = `Restored: ${summary.rules ? 'rules, ' : ''}${summary.categories} categories, ${summary.rankJobs} rank + ${summary.ladderJobs} ladder edits queued.`;
+      } catch (err) { msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+      finally { btn.disabled = false; }
+    });
+
+    card.querySelector('[data-delbk]').addEventListener('click', async (e) => {
+      if (!confirm('Delete this backup? The copy is gone; the live config is untouched.')) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try { await api.dash.deleteBackup(id); card.remove(); }
+      catch { btn.disabled = false; msg.className = 'fmsg bad'; msg.textContent = 'Could not delete.'; }
     });
   });
 }

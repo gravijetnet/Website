@@ -47,24 +47,26 @@ function personEl(p, data) {
   // page is also a way to read who can do what — just not editable.
   const locked = !you && p.tier >= data.you.tier;
 
+  const topRank = p.ranks.length ? esc(p.ranks[0]) : 'no rank';
   return `
-    <section class="panel entry acc-person" data-id="${esc(p.id)}" data-tier="${p.tier}">
-      <div class="panel-head">
-        <div>
-          <h3>${esc(p.name || p.id)} ${you ? '<span class="tagged">you</span>' : ''}</h3>
-          <div class="ph-sub">${p.ranks.length ? esc(p.ranks.join(', ')) : 'no rank'}${p.updatedAt ? ` · exception set ${esc(timeAgo(p.updatedAt))}${p.updatedBy ? ` by ${esc(p.updatedBy)}` : ''}` : ''}</div>
-        </div>
-        <div class="ph-right">
-          ${locked ? '<span class="dr">outranks you — read only</span>' : '<button class="btn btn-primary" data-save>Save</button>'}
-        </div>
-      </div>
+    <details class="panel entry acc-person card-roll" data-id="${esc(p.id)}" data-tier="${p.tier}">
+      <summary class="card-sum">
+        <span class="cs-name">${esc(p.name || p.id)} ${you ? '<span class="tagged">you</span>' : ''}</span>
+        <span class="dr">${topRank}</span>
+        ${p.updatedAt ? '<span class="re-tag">exception</span>' : ''}
+        ${locked ? '<span class="cs-meta">read only</span>' : ''}
+      </summary>
       <div class="panel-body">
+        <div class="ph-sub">${p.ranks.length ? esc(p.ranks.join(', ')) : 'no rank'}${p.updatedAt ? ` · exception set ${esc(timeAgo(p.updatedAt))}${p.updatedBy ? ` by ${esc(p.updatedBy)}` : ''}` : ''}</div>
         <div class="acc-grid">
           ${data.abilities.map((a) => abilityBox(a, p, locked, data)).join('')}
         </div>
-        <span class="fmsg" data-msg></span>
+        <div class="factions">
+          ${locked ? '<span class="dr">outranks you — read only</span>' : '<button class="btn btn-primary" data-save>Save</button>'}
+          <span class="fmsg" data-msg></span>
+        </div>
       </div>
-    </section>`;
+    </details>`;
 }
 
 function abilityBox(a, p, locked, data) {

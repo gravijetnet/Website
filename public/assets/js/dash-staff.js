@@ -18,7 +18,9 @@ import { paintStaffTabs, STAFF_TABS } from './shell.js';
 import { esc, head, int, timeAgo, dateShort, playtime, dur } from './util.js';
 import { renderRulesEditor } from './dash-rules.js';
 import { renderAccess } from './dash-access.js';
-import { renderRanks, renderLadders } from './dash-network.js';
+import { renderRanks, renderLadders, renderReportMenu, renderBackups } from './dash-network.js';
+import { renderUsers } from './dash-users.js';
+import { renderBroadcast } from './dash-broadcast.js';
 
 const SITE = 'https://example.invalid';
 
@@ -69,9 +71,13 @@ export async function renderStaffDash(root, tab) {
     else if (active.key === 'reports') await paintReports(body, can);
     else if (active.key === 'appeals') await paintAppeals(body, can);
     else if (active.key === 'players') await paintPlayers(body, can);
+    else if (active.key === 'users') await renderUsers(body, can);
+    else if (active.key === 'broadcast') await renderBroadcast(body, can);
     else if (active.key === 'rules') await renderRulesEditor(body, can);
     else if (active.key === 'ranks') await renderRanks(body, can);
     else if (active.key === 'ladders') await renderLadders(body, can);
+    else if (active.key === 'reportmenu') await renderReportMenu(body, can);
+    else if (active.key === 'backups') await renderBackups(body, can);
     else if (active.key === 'access') await renderAccess(body, can);
     else if (active.key === 'audit') await paintAudit(body);
   } catch (err) {
@@ -221,20 +227,20 @@ function applicationCard(a, can) {
   const decided = a.status !== 'pending';
   const cls = a.status === 'accepted' ? 'live' : a.status === 'rejected' ? 'dead' : 'soon';
   return `
-    <section class="panel entry" data-id="${esc(a._id)}">
-      <div class="panel-head">
-        <div class="glyph">${icons.staff}</div>
-        <div>
-          <h3>${esc(a.roleLabel)} — ${esc(a.discordName)}</h3>
-          <div class="ph-sub">
-            sent ${timeAgo(a.submittedAt)}
-            ${decided ? ` · ${esc(a.status)} ${reviewer(a)}` : ''}
-            ${a.source === 'discord' ? ' · <span class="tagged">from the Discord bot</span>' : ''}
-          </div>
-        </div>
-        <div class="ph-right"><span class="badge ${cls}">${esc(a.status)}</span></div>
-      </div>
+    <details class="panel entry card-roll" data-id="${esc(a._id)}">
+      <summary class="card-sum">
+        <div class="glyph glyph-sm">${icons.staff}</div>
+        <span class="cs-name">${esc(a.roleLabel)}</span>
+        <span class="dr">${esc(a.discordName)}</span>
+        <span class="badge ${cls}" data-badge>${esc(a.status)}</span>
+        <span class="cs-meta">${timeAgo(a.submittedAt)}</span>
+      </summary>
       <div class="panel-body">
+        <div class="ph-sub">
+          sent ${timeAgo(a.submittedAt)}
+          ${decided ? ` · ${esc(a.status)} ${reviewer(a)}` : ''}
+          ${a.source === 'discord' ? ' · <span class="tagged">from the Discord bot</span>' : ''}
+        </div>
         <div class="qa">
           ${(a.qa || []).map((x) => `<div class="qa-row"><div class="qa-q">${esc(x.q)}</div><div class="qa-a">${esc(x.a)}</div></div>`).join('')}
         </div>
@@ -253,7 +259,7 @@ function applicationCard(a, can) {
             : ''
         }
       </div>
-    </section>`;
+    </details>`;
 }
 
 function wireApplications(body) {
@@ -267,7 +273,8 @@ function wireApplications(body) {
       msg.textContent = 'Saving…';
       try {
         await api.dash.reviewApplication(panel.dataset.id, btn.dataset.act, note);
-        panel.querySelector('.ph-right').innerHTML = `<span class="badge ${btn.dataset.act === 'accepted' ? 'live' : 'dead'}">${esc(btn.dataset.act)}</span>`;
+        const badge = panel.querySelector('[data-badge]');
+        if (badge) { badge.className = `badge ${btn.dataset.act === 'accepted' ? 'live' : 'dead'}`; badge.textContent = btn.dataset.act; }
         panel.querySelector('.factions').innerHTML = '<span class="fmsg ok">Recorded.</span>';
       } catch (err) {
         panel.querySelectorAll('[data-act]').forEach((b) => (b.disabled = false));
@@ -300,23 +307,19 @@ async function paintReports(body, can) {
         ? list
             .map(
               (r) => `
-      <section class="panel entry" data-id="${esc(r._id)}">
-        <div class="panel-head">
-          <div class="glyph">${icons.report}</div>
-          <div>
-            <h3>${esc(r.target.name)} — ${esc(r.categoryLabel)}</h3>
-            <div class="ph-sub">
-              by ${esc(r.discordName)} · ${timeAgo(r.filedAt)}
-              ${r.status === 'closed' ? ` · ${esc(r.outcome)} by ${esc(r.resolvedBy?.name || 'unknown')}` : ''}
-            </div>
-          </div>
-          <div class="ph-right">
-            <a class="btn" href="/players?q=${encodeURIComponent(r.target.name)}">Look up</a>
-          </div>
-        </div>
+      <details class="panel entry card-roll" data-id="${esc(r._id)}">
+        <summary class="card-sum">
+          <div class="glyph glyph-sm">${icons.report}</div>
+          <span class="cs-name">${esc(r.target.name)}</span>
+          <span class="dr">${esc(r.categoryLabel)}</span>
+          <span class="badge ${r.status === 'closed' ? '' : 'soon'}">${r.status === 'closed' ? esc(r.outcome) : 'open'}</span>
+          <span class="cs-meta">${timeAgo(r.filedAt)}</span>
+        </summary>
         <div class="panel-body">
+          <div class="ph-sub">by ${esc(r.discordName)}${r.status === 'closed' ? ` · ${esc(r.outcome)} by ${esc(r.resolvedBy?.name || 'unknown')}` : ''}</div>
           <p class="rule-text">${esc(r.detail)}</p>
           ${r.evidence ? `<div class="block"><div class="block-label">Evidence</div><a href="${esc(r.evidence)}" target="_blank" rel="noopener nofollow" data-ext>${esc(r.evidence)}</a></div>` : ''}
+          <a class="btn" href="/players?q=${encodeURIComponent(r.target.name)}">Look up ${esc(r.target.name)}</a>
           ${
             can.resolveReports && r.status === 'open'
               ? `<div class="block"><div class="factions">
@@ -328,7 +331,7 @@ async function paintReports(body, can) {
               : ''
           }
         </div>
-      </section>`,
+      </details>`,
             )
             .join('')
         : empty(status === '' ? 'No open reports.' : 'Nothing here.')
@@ -373,22 +376,21 @@ async function paintAppeals(body, can) {
         ? list
             .map(
               (a) => `
-      <section class="panel entry" data-id="${esc(a._id)}">
-        <div class="panel-head">
-          <div class="glyph">${icons.shield}</div>
-          <div>
-            <h3>${esc(a.target.name || a.target.uuid)} — ${esc(a.punishment.type)}</h3>
-            <div class="ph-sub">
-              ${esc(a.punishmentId)} · ${esc(a.punishment.reason || 'no reason recorded')} · ${timeAgo(a.filedAt)}
-              ${a.status === 'closed' ? ` · ${esc(a.outcome)} by ${esc(a.resolvedBy?.name || 'unknown')}` : ''}
-            </div>
-          </div>
-          <div class="ph-right">
-            ${a.target.name ? `<a class="btn" href="/players?q=${encodeURIComponent(a.target.name)}">Look up</a>` : ''}
-          </div>
-        </div>
+      <details class="panel entry card-roll" data-id="${esc(a._id)}">
+        <summary class="card-sum">
+          <div class="glyph glyph-sm">${icons.shield}</div>
+          <span class="cs-name">${esc(a.target.name || a.target.uuid)}</span>
+          <span class="dr">${esc(a.punishment.type)}</span>
+          <span class="badge ${a.status === 'closed' ? '' : 'soon'}">${a.status === 'closed' ? esc(a.outcome) : 'open'}</span>
+          <span class="cs-meta">${timeAgo(a.filedAt)}</span>
+        </summary>
         <div class="panel-body">
+          <div class="ph-sub">
+            ${esc(a.punishmentId)} · ${esc(a.punishment.reason || 'no reason recorded')}
+            ${a.status === 'closed' ? ` · ${esc(a.outcome)} by ${esc(a.resolvedBy?.name || 'unknown')}` : ''}
+          </div>
           <p class="rule-text">${esc(a.reason)}</p>
+          ${a.target.name ? `<a class="btn" href="/players?q=${encodeURIComponent(a.target.name)}">Look up ${esc(a.target.name)}</a>` : ''}
           ${a.note ? `<div class="block"><div class="block-label">Note</div><p class="rule-text">${esc(a.note)}</p></div>` : ''}
           ${
             can.resolveAppeals && a.status === 'open'
@@ -403,7 +405,7 @@ async function paintAppeals(body, can) {
               : ''
           }
         </div>
-      </section>`,
+      </details>`,
             )
             .join('')
         : empty(status === '' ? 'No open appeals.' : 'Nothing here.')
@@ -440,7 +442,8 @@ async function paintPlayers(body, can) {
       <div class="panel-body">
         <div class="frow">
           <label class="flabel" for="pq">Look up a player</label>
-          <input class="fld" id="pq" type="text" maxlength="32" placeholder="Exact in-game name" value="${esc(q)}">
+          <input class="fld" id="pq" type="text" maxlength="32" placeholder="Start typing a name" value="${esc(q)}" list="pqac" autocomplete="off" spellcheck="false">
+          <datalist id="pqac"></datalist>
         </div>
         <div class="factions"><button class="btn btn-primary" id="look">Look up</button><span class="fmsg" id="pmsg"></span></div>
       </div>
@@ -474,6 +477,23 @@ async function paintPlayers(body, can) {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') look();
   });
+
+  // Autocomplete from the same search the site uses. A datalist keeps it native
+  // — nothing to build or dismiss — and it only offers names.
+  const acList = body.querySelector('#pqac');
+  let acTimer = null;
+  input.addEventListener('input', () => {
+    const term = input.value.trim();
+    clearTimeout(acTimer);
+    if (term.length < 2) { acList.innerHTML = ''; return; }
+    acTimer = setTimeout(async () => {
+      try {
+        const hits = await api.search(term);
+        acList.innerHTML = hits.map((p) => `<option value="${esc(p.name)}"></option>`).join('');
+      } catch { /* keep the last suggestions */ }
+    }, 160);
+  });
+
   if (q) look();
 
   if (can.hidePlayers) await paintHidden(body.querySelector('#hlist'));

@@ -77,9 +77,13 @@ export const STAFF_TABS = [
   { key: 'reports', label: 'Reports', need: 'viewReports' },
   { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
   { key: 'players', label: 'Players', need: 'viewPlayers' },
+  { key: 'users', label: 'Users', need: 'viewPlayers' },
+  { key: 'broadcast', label: 'Broadcast', need: 'broadcast' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
   { key: 'ranks', label: 'Ranks', need: 'manageNetwork' },
   { key: 'ladders', label: 'Ladders', need: 'manageNetwork' },
+  { key: 'reportmenu', label: 'Report menu', need: 'manageNetwork' },
+  { key: 'backups', label: 'Backups', need: 'manageNetwork' },
   { key: 'access', label: 'Access', need: 'manageAccess' },
   { key: 'audit', label: 'Audit', need: 'viewReports' },
 ];
