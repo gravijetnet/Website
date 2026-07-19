@@ -121,6 +121,7 @@ export const CONSOLE_NAV = [
     group: 'The network',
     items: [
       { path: '/network/servers', label: 'Servers', need: 'viewReports' },
+      { path: '/network/host', label: 'Host', need: 'manageNetwork' },
       { path: '/network/broadcast', label: 'Broadcast', need: 'broadcast' },
       { path: '/network/discord', label: 'Discord', need: 'broadcast' },
       { path: '/network/ranks', label: 'Ranks', need: 'manageNetwork' },
@@ -155,6 +156,7 @@ export const NETWORK_PAGES = [
   // The overview comes first, and is open to anyone who can read a report — what
   // the network is doing right now is not privileged information among staff.
   { key: 'servers', label: 'Servers', need: 'viewReports' },
+  { key: 'host', label: 'Host', need: 'manageNetwork' },
   { key: 'ranks', label: 'Ranks', need: 'manageNetwork' },
   { key: 'ladders', label: 'Ladders', need: 'manageNetwork' },
   { key: 'reportmenu', label: 'Report menu', need: 'manageNetwork' },

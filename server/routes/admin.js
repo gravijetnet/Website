@@ -686,7 +686,11 @@ router.get('/dash/users', staff.requires('viewPlayers'), async (req, res) => {
       byId.set(s.discord.id, {
         id: s.discord.id,
         name: s.discord.globalName || s.discord.username,
-        avatar: s.discord.avatar || null,
+        // Discord hands out a hash, not a URL — the CDN path has to be built
+        // from it. Passing the bare hash through is why these rendered blank.
+        avatar: s.discord.avatar
+          ? `https://cdn.discordapp.com/avatars/${s.discord.id}/${s.discord.avatar}.png?size=64`
+          : null,
         roles: s.roles || [],
         lastSeen: seen,
         since: s.createdAt || null,

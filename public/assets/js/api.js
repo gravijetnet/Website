@@ -150,6 +150,17 @@ export const api = {
     rebootCancel: (server) => send('/dash/server/reboot', 'POST', { server, cancel: true }),
     runCommand: (server, command) => send('/dash/server/command', 'POST', { server, command }),
 
+    // The host underneath the game — FeatherPanel (routes/panel).
+    panelServers: (q) => get(`/dash/panel/servers${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    panelBackups: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/backups`),
+    panelWorlds: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/worlds`),
+    panelPlayers: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/players`),
+    panelPower: (id, action) => send(`/dash/panel/servers/${encodeURIComponent(id)}/power/${action}`, 'POST'),
+    panelCommand: (id, command) => send(`/dash/panel/servers/${encodeURIComponent(id)}/command`, 'POST', { command }),
+    panelBackup: (id) => send(`/dash/panel/servers/${encodeURIComponent(id)}/backups`, 'POST'),
+    panelRestore: (id, b) => send(`/dash/panel/servers/${encodeURIComponent(id)}/backups/${encodeURIComponent(b)}/restore`, 'POST'),
+    panelDeleteBackup: (id, b) => send(`/dash/panel/servers/${encodeURIComponent(id)}/backups/${encodeURIComponent(b)}`, 'DELETE'),
+
     // One box over the whole console.
     search: (q) => get(`/dash/search?q=${encodeURIComponent(q)}`),
 

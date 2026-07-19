@@ -107,6 +107,18 @@ module.exports = {
     ttlMs: 7 * 24 * 60 * 60 * 1000,
   },
 
+  // FeatherPanel — the host the game servers run on. This is the layer *below*
+  // Phoenix: power, the container's console, backups, worlds. The key is
+  // IP-restricted at the panel's end and lives in /etc/gravijet-stats.env with
+  // the Discord secret; it is never in this repository.
+  feather: {
+    base: (process.env.FEATHER_BASE || '').replace(/\/$/, ''),
+    key: process.env.FEATHER_API_KEY || '',
+    // Somebody else's host, across the internet. A console that hangs because
+    // the panel is slow is a broken console.
+    timeoutMs: parseInt(process.env.FEATHER_TIMEOUT_MS || '12000', 10),
+  },
+
   // How long API responses are cached in memory (ms).
   cacheTtl: parseInt(process.env.CACHE_TTL || '20000', 10),
 };

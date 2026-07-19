@@ -1234,3 +1234,8 @@ textarea.fld.mono { line-height: 1.45; }
   .modal-acts { flex-direction: column-reverse; }
   .modal-acts .btn { width: 100%; }
 }
+
+/* The host page: a starting server is neither up nor down, and saying so with a
+   third colour beats leaving it looking offline while it boots. */
+.srv-dot.warm { background: var(--mc-gold); }
+.host-card .block > summary { padding-left: 0; }

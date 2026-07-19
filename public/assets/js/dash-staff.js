@@ -26,6 +26,7 @@ import { renderBroadcast } from './dash-broadcast.js';
 import { renderLogs } from './dash-logs.js';
 import { renderServers } from './dash-servers.js';
 import { renderDiscord } from './dash-discord.js';
+import { renderPanel } from './dash-panel.js';
 import { attachPlayerSuggest } from './suggest.js';
 
 const SITE = 'https://example.invalid';
@@ -118,6 +119,7 @@ async function paintNetwork(body, can, sub) {
 
   const npage = body.querySelector('#npage');
   if (page.key === 'servers') await renderServers(npage, can);
+  else if (page.key === 'host') await renderPanel(npage, can);
   else if (page.key === 'ranks') await renderRanks(npage, can);
   else if (page.key === 'ladders') await renderLadders(npage, can);
   else if (page.key === 'reportmenu') await renderReportMenu(npage, can);
