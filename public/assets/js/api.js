@@ -150,6 +150,9 @@ export const api = {
     rebootCancel: (server) => send('/dash/server/reboot', 'POST', { server, cancel: true }),
     runCommand: (server, command) => send('/dash/server/command', 'POST', { server, command }),
 
+    // One box over the whole console.
+    search: (q) => get(`/dash/search?q=${encodeURIComponent(q)}`),
+
     // Everything the core recorded about one player, and chat frozen as evidence.
     dossier: (name) => get(`/dash/player/${encodeURIComponent(name)}/dossier`),
     takeSnapshot: (name) => send('/dash/player/snapshot', 'POST', { name }),

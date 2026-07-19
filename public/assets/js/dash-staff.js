@@ -76,6 +76,7 @@ export async function renderStaffDash(root, tab, sub) {
       <div id="cbody">${pageLoader()}</div>
     </div></section>`;
   const body = root.querySelector('#cbody');
+  wireConsoleSearch(root);
 
   try {
     if (active.key === '') await paintQueue(body, can, me);
@@ -161,6 +162,49 @@ function currentPath(tab, sub) {
   return sub ? `/${tab}/${sub}` : `/${tab}`;
 }
 
+// One box over the whole console: a player, a punishment id off a ban screen, a
+// rank, a ladder, anybody who has signed in. It only ever returns things the
+// caller could already have opened, so it cannot become a way around a
+// permission — the server decides that, not this.
+function wireConsoleSearch(root) {
+  const input = root.querySelector('#cq');
+  const out = root.querySelector('#cqr');
+  if (!input || !out) return;
+  let timer = null;
+  let seq = 0;
+
+  const close = () => { out.innerHTML = ''; };
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) return close();
+    const mine = ++seq;
+    timer = setTimeout(async () => {
+      try {
+        const { results } = await api.dash.search(q);
+        if (mine !== seq || !input.isConnected) return;
+        out.innerHTML = results.length
+          ? results
+            .map((r) => `
+              <a class="search-row" href="${r.href}">
+                <span class="nm">${esc(r.label)}</span>
+                <span class="rk">${esc(r.hint)}</span>
+              </a>`)
+            .join('')
+          : '<div class="search-row"><span class="rk">Nothing found.</span></div>';
+      } catch {
+        close();
+      }
+    }, 180);
+  });
+
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.blur(); close(); } });
+  document.addEventListener('click', (e) => {
+    if (e.target !== input && !out.contains(e.target)) close();
+  });
+}
+
 function sidebar(can, tab, sub) {
   const here = currentPath(tab, sub);
   // The network group defaults to its first page, so /network alone still marks
@@ -173,6 +217,10 @@ function sidebar(can, tab, sub) {
 
   return `
     <nav class="conside" aria-label="Spielplatz">
+      <div class="csearch">
+        <input class="fld" id="cq" placeholder="Search everything" autocomplete="off" spellcheck="false" aria-label="Search Spielplatz">
+        <div class="search-results" id="cqr"></div>
+      </div>
       ${groups
         .map(
           (g) => `

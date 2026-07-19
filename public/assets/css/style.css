@@ -1142,6 +1142,10 @@ textarea.fld.mono { line-height: 1.45; }
    click from every other, and always in the same place. */
 .console-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 24px; align-items: start; }
 .conside { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 14px; }
+.csearch { position: relative; }
+.csearch .fld { width: 100%; }
+.csearch .search-results { left: 0; right: auto; width: 100%; top: 100%; margin-top: 2px; }
+.csearch .search-row { justify-content: space-between; }
 .cg { display: flex; flex-direction: column; gap: 1px; }
 .cg-label {
   font-size: 16px; color: var(--mc-dark-gray); text-shadow: 2px 2px 0 #1a1a1a;

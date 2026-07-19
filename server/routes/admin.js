@@ -1081,6 +1081,80 @@ router.get('/dash/logs/chat', staff.requires('viewReports'), async (req, res) =>
   }
 });
 
+// --- one search over everything ---------------------------------------------
+//
+// A console with twenty pages makes you remember which one holds the thing you
+// are looking for. This does not: give it a name, an id, a rank, a punishment id
+// or a word somebody said, and it says where that thing is. It searches only
+// what the caller may already read — the results are gated the same as the pages
+// they link to, so this can never become a way around a permission.
+router.get('/dash/search', staff.requires('viewReports'), async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 64);
+  if (q.length < 2) return res.json({ results: [] });
+  const rx = new RegExp(escapeRegex(q), 'i');
+  const can = req.staff.abilities;
+  const results = [];
+
+  try {
+    // Players, by name.
+    if (can.viewPlayers) {
+      const profiles = await (await mongo.phoenix.profiles())
+        .find({ name: rx }, { projection: { name: 1 } })
+        .limit(6)
+        .toArray();
+      for (const p of profiles) {
+        results.push({ kind: 'player', label: p.name, hint: 'player', href: `/players?q=${encodeURIComponent(p.name)}` });
+      }
+    }
+
+    // A punishment id, which is the thing printed on a ban screen and therefore
+    // the thing a player quotes when they appeal.
+    const punishment = await (await mongo.phoenix.punishments()).findOne({ punishmentID: q.toUpperCase() });
+    if (punishment) {
+      results.push({
+        kind: 'punishment',
+        label: q.toUpperCase(),
+        hint: `${punishment.punishmentType || 'punishment'} — ${punishment.reason || 'no reason'}`,
+        href: '/appeals',
+      });
+    }
+
+    // Ranks and ladders, for the people who may edit them.
+    if (can.manageNetwork) {
+      const ranks = await (await mongo.phoenix.ranks()).find({ name: rx }, { projection: { name: 1 } }).limit(4).toArray();
+      for (const r of ranks) results.push({ kind: 'rank', label: r.name, hint: 'rank', href: '/network/ranks' });
+
+      const ladders = await (await mongo.phoenix.punishmentLadders()).find({ _id: rx }, { projection: { _id: 1 } }).limit(4).toArray();
+      for (const l of ladders) results.push({ kind: 'ladder', label: l._id, hint: 'ladder', href: '/network/ladders' });
+    }
+
+    // Anybody who has signed in, by name or by Discord id.
+    if (can.viewPlayers) {
+      const sessions = await (await mongo.collection(config.mongo.siteDb, 'sessions'))
+        .find({ $or: [{ 'discord.username': rx }, { 'discord.globalName': rx }, { 'discord.id': q }] })
+        .limit(5)
+        .toArray();
+      const seen = new Set();
+      for (const s of sessions) {
+        const id = s.discord?.id;
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        results.push({
+          kind: 'user',
+          label: s.discord.globalName || s.discord.username,
+          hint: `signed in · ${id}`,
+          href: '/users',
+        });
+      }
+    }
+
+    res.json({ results: results.slice(0, 20) });
+  } catch (err) {
+    console.error('[dash search]', err);
+    res.status(500).json({ error: 'search_unavailable' });
+  }
+});
+
 // --- export -----------------------------------------------------------------
 //
 // The audit and the logs, out, for keeping. A record you cannot get a copy of is

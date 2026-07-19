@@ -69,19 +69,17 @@ const PLAYER_TAB_OF = {
   appeal: 'appeals',
 };
 
-// The console's tabs, each gated on an ability the server also enforces. Hiding
-// a tab is a courtesy, not the check: /api refuses regardless of what is drawn.
-// `header: true` is the shift-work set — the five places a moderator actually
-// moves between during a shift, and all the strip carries. Eleven tabs up there
-// was a row you could not read, let alone hit; everything else is reached from
-// the console's own front page, which is a menu of them. See hubGrid in
-// dash-staff. Every page still has a real address, so nothing is buried.
+// What pages exist and who may open them — the routing and permission table.
+// Hiding a page is a courtesy, not the check: /api refuses regardless of what is
+// drawn. The *navigation* is CONSOLE_NAV below, drawn down the side of the page;
+// the two are separate because "what is this called in a menu" and "may they
+// open it" are different questions with different answers.
 export const STAFF_TABS = [
-  { key: '', label: 'Queue', need: 'viewReports', header: true },
-  { key: 'applications', label: 'Applications', need: 'viewApplications', header: true },
-  { key: 'reports', label: 'Reports', need: 'viewReports', header: true },
-  { key: 'appeals', label: 'Appeals', need: 'viewAppeals', header: true },
-  { key: 'players', label: 'Players', need: 'viewPlayers', header: true },
+  { key: '', label: 'Queue', need: 'viewReports' },
+  { key: 'applications', label: 'Applications', need: 'viewApplications' },
+  { key: 'reports', label: 'Reports', need: 'viewReports' },
+  { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
+  { key: 'players', label: 'Players', need: 'viewPlayers' },
   { key: 'users', label: 'Users', need: 'viewPlayers' },
   { key: 'logs', label: 'Logs', need: 'viewReports' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
