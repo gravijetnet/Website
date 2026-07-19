@@ -27,6 +27,7 @@ export async function renderLogs(root) {
           ${KINDS.map((k, i) => `<button class="btn lb-tab ${i === 0 ? 'active' : ''}" data-kind="${k.key}">${k.label}</button>`).join('')}
         </div>
         <input class="fld fld-inline" id="lq" placeholder="Search by player or text" autocomplete="off" spellcheck="false">
+        <button class="btn" id="lexport" title="Download the whole log, not just what is shown">Export</button>
       </div>
     </div></section>
     <div id="loglist">${pageLoader()}</div>`;
@@ -63,6 +64,12 @@ export async function renderLogs(root) {
   input.addEventListener('input', () => {
     clearTimeout(timer);
     timer = setTimeout(load, 250);
+  });
+
+  // The export is the whole log rather than the current search: a copy you keep
+  // should not depend on what happened to be typed in a box when you took it.
+  root.querySelector('#lexport').addEventListener('click', () => {
+    window.location.href = `/api/dash/export/${kind === 'commands' ? 'commands' : 'chat'}`;
   });
 
   await load();

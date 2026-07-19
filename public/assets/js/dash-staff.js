@@ -1327,6 +1327,7 @@ async function paintAudit(body) {
   body.innerHTML = `
     <div class="section-head">
       <div><h2>Audit</h2><p>Every decision made here, against the name of whoever made it. Yours included.</p></div>
+      <a class="btn" href="/api/dash/export/audit">Export</a>
     </div>
     ${
       list.length

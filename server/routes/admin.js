@@ -1081,4 +1081,44 @@ router.get('/dash/logs/chat', staff.requires('viewReports'), async (req, res) =>
   }
 });
 
+// --- export -----------------------------------------------------------------
+//
+// The audit and the logs, out, for keeping. A record you cannot get a copy of is
+// a record you are trusting somebody else's disk with — and these are the two
+// that answer "what happened" long after the window the core keeps has rolled.
+const EXPORTS = {
+  audit: {
+    need: 'viewReports',
+    load: async () => (await mongo.site.audit()).find({}).sort({ at: -1 }).limit(10000).toArray(),
+  },
+  commands: {
+    need: 'viewReports',
+    load: async () => (await mongo.phoenix.commandLogs()).find({}).sort({ issuedOn: -1 }).limit(10000).toArray(),
+  },
+  chat: {
+    need: 'viewReports',
+    load: async () => (await mongo.phoenix.chatLogs()).find({}).sort({ timestamp: -1 }).limit(10000).toArray(),
+  },
+};
+
+router.get('/dash/export/:what', async (req, res, next) => {
+  const spec = EXPORTS[String(req.params.what)];
+  if (!spec) return res.status(404).json({ error: 'unknown_export' });
+  // Gated per export rather than once at the top, so adding a wider one later
+  // cannot inherit a narrower one's permission by accident.
+  return staff.requires(spec.need)(req, res, () => next());
+}, async (req, res) => {
+  const what = String(req.params.what);
+  try {
+    const rows = await EXPORTS[what].load();
+    await audit.record(req, 'export', what, { rows: rows.length });
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="gravijet-${what}.json"`);
+    res.send(JSON.stringify({ export: what, at: Date.now(), rows }, null, 2));
+  } catch (err) {
+    console.error('[dash export]', err);
+    res.status(500).json({ error: 'export_failed' });
+  }
+});
+
 module.exports = router;
