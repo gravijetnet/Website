@@ -33,11 +33,75 @@ const bytes = (n) => {
 
 const STATE = { running: 'up', starting: 'starting', stopping: 'stopping', offline: 'down' };
 
+// A meter, not a number. "24.3 of 31.3 GB" is a fact you have to do arithmetic on
+// before it means anything; a bar at 78% is the same fact already understood.
+// The colour is the reading, not decoration: green while there is room, gold when
+// it is getting tight, red when the next thing to start probably will not.
+function meter(label, used, total, text) {
+  const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const band = pct >= 90 ? 'hot' : pct >= 70 ? 'warm' : '';
+  return `
+    <div class="meter">
+      <div class="meter-top">
+        <span class="meter-l">${esc(label)}</span>
+        <span class="meter-v">${esc(text)}</span>
+        <span class="meter-p ${band}">${Math.round(pct)}%</span>
+      </div>
+      <div class="meter-bar"><span class="${band}" style="width:${pct.toFixed(1)}%"></span></div>
+    </div>`;
+}
+
+// What the machine is doing right now, against what it has. The panel's
+// per-server figures are allocations — a budget somebody wrote down — and this is
+// the meter, which is the number that tells you whether anything is actually
+// wrong. They are shown together and labelled as the two different things they
+// are, because a box can be 300% allocated and perfectly idle.
+function nodePanel(n) {
+  if (!n || !n.configured || !n.node) return '';
+  const gb = (b) => `${(b / 1073741824).toFixed(1)} GB`;
+  const allocGb = n.allocated ? n.allocated.memoryMb / 1024 : 0;
+  const capacityGb = n.memory.total / 1073741824;
+  const over = allocGb && capacityGb ? allocGb / capacityGb : 0;
+
+  return `
+    <section class="panel entry">
+      <div class="panel-head">
+        <div class="glyph glyph-sm"><span class="srv-dot ${n.node.status === 'healthy' ? 'on' : ''}"></span></div>
+        <div>
+          <h3>${esc(n.node.name || 'the node')}</h3>
+          <div class="ph-sub">${esc(n.node.status)}${n.node.fqdn ? ` · ${esc(n.node.fqdn)}` : ''} · load ${n.load.map((l) => l.toFixed(2)).join(' / ')}</div>
+        </div>
+      </div>
+      <div class="panel-body">
+        ${meter('Memory', n.memory.used, n.memory.total, `${gb(n.memory.used)} of ${gb(n.memory.total)}`)}
+        ${meter('CPU', n.cpu, 100, `${n.cpu.toFixed(1)}%`)}
+        ${meter('Disk', n.disk.used, n.disk.total, `${gb(n.disk.used)} of ${gb(n.disk.total)}`)}
+        ${n.swap.total ? meter('Swap', n.swap.used, n.swap.total, `${gb(n.swap.used)} of ${gb(n.swap.total)}`) : ''}
+        ${
+          n.allocated
+            ? `<p class="rule-text meter-note">Every server on this host has been promised
+                 ${allocGb.toFixed(1)} GB between them — ${over >= 1.05 ? `${over.toFixed(1)}× the machine's ${capacityGb.toFixed(1)} GB` : `under its ${capacityGb.toFixed(1)} GB`}.
+                 Allocation is a budget; the bars above are what is actually being used.</p>`
+            : ''
+        }
+      </div>
+    </section>`;
+}
+
 export async function renderPanel(root, can) {
   root.innerHTML = pageLoader();
   let data;
+  let node = null;
   try {
-    data = await api.dash.panelServers();
+    // Asked for together: the list is useless without knowing whether the box
+    // behind it has any room left, and one of them failing should not hide the
+    // other.
+    const [servers, nodeStatus] = await Promise.all([
+      api.dash.panelServers(),
+      api.dash.panelNode().catch(() => null),
+    ]);
+    data = servers;
+    node = nodeStatus;
   } catch (err) {
     root.innerHTML = notice('The host is unreachable', panelErr(err));
     return;
@@ -59,15 +123,17 @@ export async function renderPanel(root, can) {
     <div class="section-head">
       <div>
         <h2>Host</h2>
-        <p>The machines the game runs on — power, their own console, backups and worlds. This is the layer below Phoenix: a restart here takes the container away rather than asking the server to come back.</p>
+        <p>The machines the game runs on — power, their own console, backups and worlds. Only this network's own servers are listed and only they can be touched; the host carries other people's too. This is the layer below Phoenix: a restart here takes the container away rather than asking the server to come back.</p>
       </div>
     </div>
 
+    ${nodePanel(node)}
+
     <div class="ptiles ptiles-4">
-      <div class="ptile entry"><span class="pt-n">${int(servers.length)}</span><span class="pt-l">servers</span></div>
+      <div class="ptile entry"><span class="pt-n">${int(servers.length)}</span><span class="pt-l">servers here</span></div>
       <div class="ptile entry"><span class="pt-n">${int(up.length)}</span><span class="pt-l">running</span></div>
       <div class="ptile entry"><span class="pt-n">${int(down.length)}</span><span class="pt-l">offline</span></div>
-      <div class="ptile entry"><span class="pt-n">${int(servers.reduce((n, s) => n + s.memory, 0) / 1024)}</span><span class="pt-l">GB allotted</span></div>
+      <div class="ptile entry"><span class="pt-n">${(servers.reduce((n, s) => n + s.memory, 0) / 1024).toFixed(1)}</span><span class="pt-l">GB promised to these</span></div>
     </div>
 
     <div id="hostlist">${servers.map((s) => serverCard(s, can)).join('')}</div>`;

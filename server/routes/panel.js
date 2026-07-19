@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 
+const config = require('../config');
 const staff = require('../lib/staff');
 const audit = require('../lib/audit');
 const feather = require('../lib/feather');
@@ -22,6 +23,7 @@ const json = express.json({ limit: '16kb' });
 
 // The panel's own words, turned into sentences that say whose problem it is.
 const REASON = {
+  not_managed: 'That server is not one this console manages.',
   not_configured: 'The panel is not configured on this server.',
   ip_not_allowed: 'The panel is refusing this server’s address — the API key is IP-restricted and this machine is not on its list.',
   unauthorised: 'The panel rejected the API key.',
@@ -57,21 +59,90 @@ function shapeServer(s) {
   };
 }
 
+// --- the allowlist ----------------------------------------------------------
+//
+// The panel account can see every server on the host, most of them belonging to
+// other people. Filtering the *list* would be theatre: the ids are guessable and
+// every action route takes one, so a filtered list with unguarded actions is a
+// console where a typo stops a stranger's Survival server.
+//
+// So the allowlist is resolved here, from the panel's own answer, and every
+// route that names a server passes through it first. A short cache keeps that
+// from costing a round trip per button press without letting a rename go stale
+// for long.
+const MANAGED = new Set(config.feather.managed);
+let cache = { at: 0, byId: new Map() };
+
+async function managedById() {
+  if (Date.now() - cache.at < 15000 && cache.byId.size) return cache.byId;
+  const data = await feather.servers();
+  const byId = new Map();
+  for (const s of data?.servers || []) {
+    if (MANAGED.has(s.name)) byId.set(s.uuidShort, s);
+  }
+  cache = { at: Date.now(), byId };
+  return byId;
+}
+
+/** Resolves an id to a server this console is allowed to touch, or refuses. */
+async function assertManaged(id) {
+  const byId = await managedById();
+  const server = byId.get(String(id));
+  if (!server) throw new feather.FeatherError('not_managed', REASON.not_managed, 403);
+  return server;
+}
+
 // --- looking ----------------------------------------------------------------
 
 router.get('/dash/panel/servers', staff.requires('manageNetwork'), async (req, res) => {
   if (!feather.configured()) return res.json({ configured: false, servers: [] });
   try {
-    const data = await feather.servers(String(req.query.q || '').trim() || undefined);
-    const list = Array.isArray(data?.servers) ? data.servers : [];
-    res.json({ configured: true, servers: list.map(shapeServer) });
+    const byId = await managedById();
+    // Listed in the order the allowlist names them: the proxy and the lobby
+    // first, because that is the order somebody thinks about the network in,
+    // not whatever order the panel's database happens to return.
+    const order = new Map(config.feather.managed.map((n, i) => [n, i]));
+    const servers = [...byId.values()]
+      .map(shapeServer)
+      .sort((a, b) => (order.get(a.name) ?? 99) - (order.get(b.name) ?? 99));
+    res.json({ configured: true, servers, managed: config.feather.managed.length });
   } catch (err) {
     return fail(res, err, 'servers');
   }
 });
 
+// What the machine is actually doing. Allocation is a budget; this is the meter.
+router.get('/dash/panel/node', staff.requires('manageNetwork'), async (req, res) => {
+  if (!feather.configured()) return res.json({ configured: false });
+  try {
+    const [status, alloc] = await Promise.all([
+      feather.nodeStatus(),
+      feather.allocation().catch(() => null),
+    ]);
+    const node = status?.nodes?.[0] || null;
+    const u = node?.utilization || {};
+    res.json({
+      configured: true,
+      node: node ? { name: (node.name || '').trim(), status: node.status, fqdn: node.fqdn } : null,
+      memory: { used: Number(u.memory_used) || 0, total: Number(u.memory_total) || 0 },
+      swap: { used: Number(u.swap_used) || 0, total: Number(u.swap_total) || 0 },
+      disk: { used: Number(u.disk_used) || 0, total: Number(u.disk_total) || 0 },
+      cpu: Number(u.cpu_percent) || 0,
+      load: [Number(u.load_average1) || 0, Number(u.load_average5) || 0, Number(u.load_average15) || 0],
+      // Everything the panel has promised out across all its servers, ours and
+      // other people's — the number that says whether the box is oversold.
+      allocated: alloc
+        ? { memoryMb: Number(alloc.total_memory_mb) || 0, diskMb: Number(alloc.total_disk_mb) || 0, cpuPercent: Number(alloc.total_cpu_percent) || 0 }
+        : null,
+    });
+  } catch (err) {
+    return fail(res, err, 'node');
+  }
+});
+
 router.get('/dash/panel/servers/:id/backups', staff.requires('manageNetwork'), async (req, res) => {
   try {
+    await assertManaged(req.params.id);
     const data = await feather.backups(req.params.id);
     const list = Array.isArray(data) ? data : (data?.data || []);
     res.json({
@@ -91,6 +162,7 @@ router.get('/dash/panel/servers/:id/backups', staff.requires('manageNetwork'), a
 
 router.get('/dash/panel/servers/:id/worlds', staff.requires('manageNetwork'), async (req, res) => {
   try {
+    await assertManaged(req.params.id);
     const data = await feather.worlds(req.params.id);
     const list = Array.isArray(data?.worlds) ? data.worlds : [];
     res.json({ worlds: list.map((w) => ({ name: w.name, bytes: Number(w.size) || 0, modified: w.modified || null })) });
@@ -105,6 +177,7 @@ router.get('/dash/panel/servers/:id/worlds', staff.requires('manageNetwork'), as
 // up unbanning nothing.
 router.get('/dash/panel/servers/:id/players', staff.requires('manageNetwork'), async (req, res) => {
   try {
+    await assertManaged(req.params.id);
     const d = await feather.players(req.params.id);
     res.json({
       online: d?.players?.players?.online ?? 0,
@@ -127,8 +200,9 @@ router.post('/dash/panel/servers/:id/power/:action', staff.requires('runCommands
   const action = String(req.params.action);
   if (!feather.POWER.has(action)) return res.status(400).json({ error: 'bad_action', detail: REASON.bad_action });
   try {
+    const server = await assertManaged(req.params.id);
     await feather.power(req.params.id, action);
-    await audit.record(req, `panel.${action}`, req.params.id);
+    await audit.record(req, `panel.${action}`, server.name);
     res.status(202).json({ ok: true });
   } catch (err) {
     return fail(res, err, 'power');
@@ -139,8 +213,9 @@ router.post('/dash/panel/servers/:id/command', staff.requires('runCommands'), js
   const command = String(req.body?.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
   if (!command) return res.status(400).json({ error: 'command_required', detail: 'Type a command.' });
   try {
+    const server = await assertManaged(req.params.id);
     await feather.command(req.params.id, command);
-    await audit.record(req, 'panel.command', req.params.id, { command });
+    await audit.record(req, 'panel.command', server.name, { command });
     res.status(202).json({ ok: true });
   } catch (err) {
     return fail(res, err, 'command');
@@ -151,8 +226,9 @@ router.post('/dash/panel/servers/:id/command', staff.requires('runCommands'), js
 // it is held to the same bar as power.
 router.post('/dash/panel/servers/:id/backups', staff.requires('manageNetwork'), async (req, res) => {
   try {
+    const server = await assertManaged(req.params.id);
     const b = await feather.createBackup(req.params.id);
-    await audit.record(req, 'panel.backup', req.params.id, { uuid: b?.uuid || null });
+    await audit.record(req, 'panel.backup', server.name, { uuid: b?.uuid || null });
     res.status(202).json({ ok: true });
   } catch (err) {
     return fail(res, err, 'backup');
@@ -161,8 +237,9 @@ router.post('/dash/panel/servers/:id/backups', staff.requires('manageNetwork'), 
 
 router.post('/dash/panel/servers/:id/backups/:backupId/restore', staff.requires('runCommands'), async (req, res) => {
   try {
+    const server = await assertManaged(req.params.id);
     await feather.restoreBackup(req.params.id, req.params.backupId);
-    await audit.record(req, 'panel.backup_restore', req.params.id, { backup: req.params.backupId });
+    await audit.record(req, 'panel.backup_restore', server.name, { backup: req.params.backupId });
     res.status(202).json({ ok: true });
   } catch (err) {
     return fail(res, err, 'restore');
@@ -171,8 +248,9 @@ router.post('/dash/panel/servers/:id/backups/:backupId/restore', staff.requires(
 
 router.delete('/dash/panel/servers/:id/backups/:backupId', staff.requires('manageNetwork'), async (req, res) => {
   try {
+    const server = await assertManaged(req.params.id);
     await feather.deleteBackup(req.params.id, req.params.backupId);
-    await audit.record(req, 'panel.backup_delete', req.params.id, { backup: req.params.backupId });
+    await audit.record(req, 'panel.backup_delete', server.name, { backup: req.params.backupId });
     res.json({ ok: true });
   } catch (err) {
     return fail(res, err, 'backup delete');

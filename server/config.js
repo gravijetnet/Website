@@ -117,6 +117,26 @@ module.exports = {
     // Somebody else's host, across the internet. A console that hangs because
     // the panel is slow is a broken console.
     timeoutMs: parseInt(process.env.FEATHER_TIMEOUT_MS || '12000', 10),
+
+    // The only servers this console may touch.
+    //
+    // The panel account can see twenty-two servers, most of which are not this
+    // network's — somebody else's Survival, a Manhunt setup, a certbot box. A
+    // console that lists them is a console where a mis-click stops a stranger's
+    // server, so this is an allowlist and it is enforced on every single call,
+    // not just used to filter the list. Anything not named here does not exist
+    // as far as Spielplatz is concerned.
+    managed: [
+      'Proxy-1',
+      'Lobby-1',
+      'example.invalid Main',
+      'example.invalid Minecraft',
+      'FFA-1',
+      'Practice-1',
+      'Bedwars-1',
+      'Fastbuilder-1',
+      'Clutches-1',
+    ],
   },
 
   // How long API responses are cached in memory (ms).

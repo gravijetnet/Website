@@ -152,6 +152,7 @@ export const api = {
 
     // The host underneath the game — FeatherPanel (routes/panel).
     panelServers: (q) => get(`/dash/panel/servers${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    panelNode: () => get('/dash/panel/node'),
     panelBackups: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/backups`),
     panelWorlds: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/worlds`),
     panelPlayers: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/players`),

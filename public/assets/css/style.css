@@ -1239,3 +1239,20 @@ textarea.fld.mono { line-height: 1.45; }
    third colour beats leaving it looking offline while it boots. */
 .srv-dot.warm { background: var(--mc-gold); }
 .host-card .block > summary { padding-left: 0; }
+
+/* --------------------------------------------------------------- meters */
+/* A number you have to do arithmetic on is not a reading. The bar is the
+   reading, and its colour is part of it: green while there is room, gold when it
+   is tight, red when the next thing to start probably will not. */
+.meter { margin-bottom: 12px; }
+.meter-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.meter-l { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; min-width: 72px; }
+.meter-v { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+.meter-p { margin-left: auto; font-size: 16px; color: var(--mc-green); text-shadow: 2px 2px 0 #153f15; }
+.meter-p.warm { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+.meter-p.hot { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+.meter-bar { height: 14px; background: #000; border: 2px solid var(--slot-lo); }
+.meter-bar span { display: block; height: 100%; background: var(--mc-green); }
+.meter-bar span.warm { background: var(--mc-gold); }
+.meter-bar span.hot { background: var(--mc-red); }
+.meter-note { margin-top: 10px; }

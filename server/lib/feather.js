@@ -99,8 +99,18 @@ const deleteBackup = (id, backupId) =>
 const worlds = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/worlds`);
 const players = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/playermanager`);
 
+// What the machine underneath is actually doing — memory and disk in use against
+// what exists, the load average, the real CPU percentage. The per-server figures
+// the panel hands out are *allocations*, which is a budget rather than a
+// reading; this is the reading.
+const nodeStatus = () => call('/api/admin/nodes/status/global');
+
+// What has been handed out across every server on the panel, for contrast with
+// the above: allocation is what was promised, utilisation is what is being used.
+const allocation = () => call('/api/admin/analytics/servers/resources');
+
 module.exports = {
   configured, call, servers, server, power, command,
   backups, createBackup, restoreBackup, deleteBackup,
-  worlds, players, POWER, FeatherError,
+  worlds, players, nodeStatus, allocation, POWER, FeatherError,
 };
