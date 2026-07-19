@@ -106,6 +106,7 @@ export const NETWORK_PAGES = [
   { key: 'filters', label: 'Chat filters', need: 'manageNetwork' },
   { key: 'tags', label: 'Tags', need: 'manageNetwork' },
   { key: 'broadcast', label: 'Broadcast', need: 'broadcast' },
+  { key: 'discord', label: 'Discord', need: 'broadcast' },
   { key: 'backups', label: 'Backups', need: 'manageNetwork' },
 ];
 

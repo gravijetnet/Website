@@ -9,7 +9,7 @@ import { api } from './api.js';
 import { esc, head, timeAgo, dateShort } from './util.js';
 import { pageLoader, notice } from './components.js';
 
-export async function renderUsers(root) {
+export async function renderUsers(root, can = {}) {
   root.innerHTML = pageLoader();
   let data;
   try {
@@ -34,11 +34,36 @@ export async function renderUsers(root) {
 
   const input = root.querySelector('#usearch');
   const list = root.querySelector('#ulist');
+  const paint = (shown) => {
+    list.innerHTML = shown.map((u) => userRow(u, can)).join('') || '<div class="empty">Nobody matches.</div>';
+    wireLinks(list);
+  };
   input.addEventListener('input', () => {
     const q = input.value.trim().toLowerCase();
-    const shown = q ? users.filter((u) => matches(u, q)) : users;
-    list.innerHTML = shown.map(userRow).join('') || '<div class="empty">Nobody matches.</div>';
+    paint(q ? users.filter((u) => matches(u, q)) : users);
   });
+  paint(users);
+}
+
+// Breaking a link decides whose Minecraft rank follows whose Discord roles, so
+// it is Admin work — and it is the fix when somebody links the wrong account.
+function wireLinks(list) {
+  list.querySelectorAll('[data-unlink]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.unlink;
+      if (!confirm('Break this account link? Their in-game rank stops following their Discord roles until they link again.')) return;
+      btn.disabled = true;
+      try {
+        const { was } = await api.dash.breakLink(id);
+        btn.replaceWith(Object.assign(document.createElement('span'), {
+          className: 'dr', textContent: `unlinked from ${was}`,
+        }));
+      } catch {
+        btn.disabled = false;
+        btn.textContent = 'could not unlink';
+      }
+    }),
+  );
 }
 
 function matches(u, q) {
@@ -50,7 +75,7 @@ function matches(u, q) {
   );
 }
 
-function userRow(u) {
+function userRow(u, can = {}) {
   const rank = u.ranks[0] || 'Member';
   const avatar = u.avatar
     ? `<img class="uav" src="${esc(u.avatar)}" alt="" onerror="this.style.visibility='hidden'">`
@@ -64,6 +89,9 @@ function userRow(u) {
         <div class="dn">${esc(u.name || 'unknown')} ${u.ranks.length ? `<span class="utag">${esc(rank)}</span>` : ''}</div>
         <div class="dr">${u.linked ? `linked to ${esc(u.linked.name)}` : 'not linked'}${u.since ? ` · joined ${esc(dateShort(u.since))}` : ''}</div>
       </div>
-      <div class="dr" title="Last seen">${u.lastSeen ? timeAgo(u.lastSeen) : '—'}</div>
+      <div class="dr urow-right" title="Last seen">
+        ${u.lastSeen ? timeAgo(u.lastSeen) : '—'}
+        ${u.linked && can.manageNetwork ? `<button class="btn ed-mini" data-unlink="${esc(u.id)}">Unlink</button>` : ''}
+      </div>
     </div>`;
 }

@@ -53,6 +53,8 @@ const phoenix = {
   tags: () => collection(config.mongo.phoenixDb, 'tags'),
   commandLogs: () => collection(config.mongo.phoenixDb, 'commandLogs'),
   chatLogs: () => collection(config.mongo.phoenixDb, 'px-chatLogs'),
+  // Frozen windows of chat, taken as evidence for a report.
+  chatSnapshots: () => collection(config.mongo.phoenixDb, 'px-chatSnapshots'),
 };
 
 // Ours to write.

@@ -416,6 +416,157 @@ router.post('/dash/player/tool', staff.requires('punishPlayers'), json, async (r
   }
 });
 
+// --- the dossier ------------------------------------------------------------
+//
+// Everything the core recorded about one player that the card does not already
+// show: where they logged in from, who else has used those addresses, and any
+// chat frozen as evidence. Shared addresses are how alts are actually found —
+// the core's own `alts` list is a starting point, not the whole answer.
+router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (req, res) => {
+  try {
+    const identity = await playersLib.byName(String(req.params.name || '').trim());
+    if (!identity) return res.status(404).json({ error: 'unknown_player' });
+
+    const loginCol = await mongo.phoenix.logins();
+    const logins = await loginCol
+      .find({ target: identity.uuid })
+      .sort({ login: -1 })
+      .limit(60)
+      .toArray();
+
+    const addresses = [...new Set(logins.map((l) => l.ip).filter(Boolean))];
+
+    // Everyone else who has come from one of those addresses.
+    const shared = addresses.length
+      ? await loginCol
+        .find({ ip: { $in: addresses }, target: { $ne: identity.uuid } }, { projection: { target: 1, ip: 1 } })
+        .limit(500)
+        .toArray()
+      : [];
+
+    const byUuid = new Map();
+    for (const row of shared) {
+      const entry = byUuid.get(row.target) || { uuid: row.target, addresses: new Set() };
+      entry.addresses.add(row.ip);
+      byUuid.set(row.target, entry);
+    }
+    const profiles = byUuid.size
+      ? await (await mongo.phoenix.profiles())
+        .find({ _id: { $in: [...byUuid.keys()] } }, { projection: { name: 1 } })
+        .toArray()
+      : [];
+    const nameOf = new Map(profiles.map((p) => [p._id, p.name]));
+
+    const snapshots = await (await mongo.phoenix.chatSnapshots())
+      .find({ 'chat.uuid': identity.uuid }, { projection: { niceId: 1, createdOn: 1, requestedBy: 1 } })
+      .sort({ createdOn: -1 })
+      .limit(20)
+      .toArray();
+
+    res.json({
+      name: identity.name,
+      uuid: identity.uuid,
+      logins: logins.map((l) => ({
+        ip: l.ip || null,
+        login: Number(l.login) || null,
+        logout: Number(l.logout) || null,
+      })),
+      addresses,
+      sharedWith: [...byUuid.values()]
+        .map((e) => ({ uuid: e.uuid, name: nameOf.get(e.uuid) || null, addresses: [...e.addresses] }))
+        .filter((e) => e.name)
+        .sort((a, b) => b.addresses.length - a.addresses.length),
+      snapshots: snapshots.map((s) => ({
+        id: s.niceId || String(s._id),
+        at: Number(s.createdOn) || null,
+        requestedBy: s.requestedBy || null,
+      })),
+    });
+  } catch (err) {
+    console.error('[dash dossier]', err);
+    res.status(500).json({ error: 'dossier_unavailable' });
+  }
+});
+
+// One frozen snapshot, in full — the transcript behind a report.
+router.get('/dash/snapshot/:id', staff.requires('viewReports'), async (req, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const doc = await (await mongo.phoenix.chatSnapshots()).findOne({ $or: [{ niceId: id }, { _id: id }] });
+    if (!doc) return res.status(404).json({ error: 'not_found' });
+
+    const uuids = [...new Set((doc.chat || []).map((c) => c.uuid).filter(Boolean))];
+    const profiles = uuids.length
+      ? await (await mongo.phoenix.profiles()).find({ _id: { $in: uuids } }, { projection: { name: 1 } }).toArray()
+      : [];
+    const nameOf = new Map(profiles.map((p) => [p._id, p.name]));
+
+    res.json({
+      id: doc.niceId || String(doc._id),
+      at: Number(doc.createdOn) || null,
+      lines: (doc.chat || []).map((c) => ({
+        by: nameOf.get(c.uuid) || null,
+        at: Number(c.time) || null,
+        // The core stores these already coloured, with § codes.
+        message: c.message || '',
+      })),
+    });
+  } catch (err) {
+    console.error('[dash snapshot]', err);
+    res.status(500).json({ error: 'snapshot_unavailable' });
+  }
+});
+
+// Freeze the chat around a player, right now, as evidence.
+router.post('/dash/player/snapshot', staff.requires('viewReports'), json, async (req, res) => {
+  try {
+    const identity = await playersLib.byName(String(req.body?.name || '').trim());
+    if (!identity) return res.status(404).json({ error: 'unknown_player' });
+    const jobId = await actions.enqueue({
+      action: 'snapshot',
+      targetUuid: identity.uuid,
+      targetName: identity.name,
+      actorUuid: await actorUuid(req),
+      actorLabel: label(req),
+    });
+    await audit.record(req, 'player.snapshot', identity.uuid, { name: identity.name, jobId });
+    res.status(202).json({ ok: true, jobId });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash snapshot create]', err);
+    res.status(500).json({ error: 'snapshot_failed' });
+  }
+});
+
+// --- the console runner -----------------------------------------------------
+
+// Any command, as console, on one named server. This is the escape hatch for
+// everything Phoenix can do that has no API — and the most dangerous thing here,
+// so it is Management only and every line is in the audit under a real name.
+router.post('/dash/server/command', staff.requires('runCommands'), json, async (req, res) => {
+  const server = String(req.body?.server || '').trim().slice(0, 64);
+  if (!server || !/^[A-Za-z0-9_-]{1,64}$/.test(server)) return res.status(400).json({ error: 'bad_server' });
+  const command = String(req.body?.command || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 255);
+  if (!command) return res.status(400).json({ error: 'command_required' });
+
+  try {
+    const jobId = await actions.enqueue({
+      action: 'command',
+      targetUuid: CONSOLE_UUID,
+      reason: command,
+      targetServer: server,
+      actorUuid: await actorUuid(req),
+      actorLabel: label(req),
+    });
+    await audit.record(req, 'server.command', server, { command, jobId });
+    res.status(202).json({ ok: true, jobId });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash command]', err);
+    res.status(500).json({ error: 'command_failed' });
+  }
+});
+
 // --- restarts ---------------------------------------------------------------
 
 // A restart happens where it is run, so this is the one job that names a server:
@@ -457,11 +608,22 @@ router.post('/dash/server/reboot', staff.requires('manageNetwork'), json, async 
 // showing as plainly as one that is up.
 router.get('/dash/servers', staff.requires('viewReports'), async (req, res) => {
   try {
-    const rows = await require('../lib/sql').query(
-      'phoenix',
-      'SELECT `name`, `server_group`, `online`, `max_players`, `whitelisted`, `updated_at`'
-        + ' FROM `network_servers` ORDER BY `server_group`, `name`',
-    );
+    const sqlLib = require('../lib/sql');
+    const COLUMNS = '`name`, `server_group`, `online`, `max_players`, `whitelisted`, `updated_at`';
+    let rows;
+    try {
+      rows = await sqlLib.query(
+        'phoenix',
+        `SELECT ${COLUMNS}, \`players\` FROM \`network_servers\` ORDER BY \`server_group\`, \`name\``,
+      );
+    } catch (e) {
+      // A server on the build before the name list publishes everything else.
+      if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.errno === 1054))) throw e;
+      rows = await sqlLib.query(
+        'phoenix',
+        `SELECT ${COLUMNS} FROM \`network_servers\` ORDER BY \`server_group\`, \`name\``,
+      );
+    }
     const now = Date.now();
     res.json({
       installed: true,
@@ -473,6 +635,7 @@ router.get('/dash/servers', staff.requires('viewReports'), async (req, res) => {
           online: Number(r.online) || 0,
           max: Number(r.max_players) || 0,
           whitelisted: !!r.whitelisted,
+          players: String(r.players || '').split('\n').map((s) => s.trim()).filter(Boolean),
           updatedAt: at,
           up: now - at < 60000,
         };

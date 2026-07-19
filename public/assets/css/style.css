@@ -1165,3 +1165,13 @@ textarea.fld.mono { line-height: 1.45; }
 /* The unstick tools: a row of plain buttons, deliberately not styled like the
    punish controls above them — none of these go on anybody's record. */
 .toolrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.urow-right { display: inline-flex; align-items: center; gap: 8px; }
+
+/* A frozen transcript, read the way the game printed it — the colours are part
+   of who was speaking, so stripping them makes it harder to follow, not easier. */
+.snapbox {
+  max-height: 340px; overflow-y: auto; padding: 10px;
+  background: #000; border: 2px solid var(--slot-lo);
+}
+.snapline { font-size: 16px; line-height: 1.5; padding: 1px 0; }
+.snapline .dr { margin-right: 6px; }

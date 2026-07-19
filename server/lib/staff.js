@@ -61,6 +61,9 @@ const NEEDS = {
   // This is the deepest thing the console can do: it changes what every player
   // on the network is, not what one of them did. Admin, like the rest.
   manageNetwork: 4,
+  // Running any command as console. The one thing here with no ceiling on what
+  // it can do, so it sits above Admin and nowhere else.
+  runCommands: 5,
 };
 
 // Shown in the Access editor, in the order they are worth reading. A bare key
@@ -82,6 +85,7 @@ const ABILITY_INFO = [
   { key: 'manageRanks', label: 'Promote and demote', note: 'Grants and revokes ranks in game and in Discord.' },
   { key: 'manageAccess', label: 'Change who can do what', note: 'This page. Hand it out carefully.' },
   { key: 'manageNetwork', label: 'Edit ranks and ladders', note: 'The network config itself — colours, prefixes, permissions, escalation. Applies in game.' },
+  { key: 'runCommands', label: 'Run console commands', note: 'Any command, as console, on any server. There is no ceiling on this one.' },
 ];
 
 // Role ids -> rank names we know. An unknown role id is simply not a rank.

@@ -145,9 +145,22 @@ export const api = {
     // The smaller powers — unsticking rather than punishing.
     playerTool: (name, tool) => send('/dash/player/tool', 'POST', { name, tool }),
 
-    // Restarts, on one named server.
+    // Restarts, and any command at all, on one named server.
     reboot: (server, seconds) => send('/dash/server/reboot', 'POST', { server, seconds }),
     rebootCancel: (server) => send('/dash/server/reboot', 'POST', { server, cancel: true }),
+    runCommand: (server, command) => send('/dash/server/command', 'POST', { server, command }),
+
+    // Everything the core recorded about one player, and chat frozen as evidence.
+    dossier: (name) => get(`/dash/player/${encodeURIComponent(name)}/dossier`),
+    takeSnapshot: (name) => send('/dash/player/snapshot', 'POST', { name }),
+    snapshot: (id) => get(`/dash/snapshot/${encodeURIComponent(id)}`),
+
+    // The Discord half (routes/discord) — the bot performs all of it.
+    discordChannels: () => get('/dash/discord/channels'),
+    discordMessage: (body) => send('/dash/discord/message', 'POST', body),
+    discordMember: (body) => send('/dash/discord/member', 'POST', body),
+    discordTask: (id) => get(`/dash/discord/task/${id}`),
+    breakLink: (discordId) => send(`/dash/link/${encodeURIComponent(discordId)}`, 'DELETE'),
 
     // The network as it is right now, and the switch that closes it.
     servers: () => get('/dash/servers'),

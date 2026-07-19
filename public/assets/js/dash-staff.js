@@ -19,12 +19,13 @@ import { esc, head, int, timeAgo, dateShort, playtime, dur } from './util.js';
 import { renderRulesEditor } from './dash-rules.js';
 import { renderAccess } from './dash-access.js';
 import {
-  renderRanks, renderLadders, renderReportMenu, renderBackups, renderFilters, renderTags,
+  renderRanks, renderLadders, renderReportMenu, renderBackups, renderFilters, renderTags, mcPreview,
 } from './dash-network.js';
 import { renderUsers } from './dash-users.js';
 import { renderBroadcast } from './dash-broadcast.js';
 import { renderLogs } from './dash-logs.js';
 import { renderServers } from './dash-servers.js';
+import { renderDiscord } from './dash-discord.js';
 import { attachPlayerSuggest } from './suggest.js';
 
 const SITE = 'https://example.invalid';
@@ -126,6 +127,7 @@ async function paintNetwork(body, can, sub) {
   else if (page.key === 'filters') await renderFilters(npage, can);
   else if (page.key === 'tags') await renderTags(npage, can);
   else if (page.key === 'broadcast') await renderBroadcast(npage, can);
+  else if (page.key === 'discord') await renderDiscord(npage, can);
   else if (page.key === 'backups') await renderBackups(npage, can);
 }
 
@@ -647,6 +649,11 @@ function playerCard(p, can) {
           }
         </div>
 
+        <details class="block card-roll" id="dossier">
+          <summary class="card-sum"><span class="cs-name">Where they connect from, and who else does</span><span class="cs-meta">open to load</span></summary>
+          <div id="dossierbody">${pageLoader()}</div>
+        </details>
+
         ${can.punishPlayers ? reachBlock() : ''}
         ${toolsBlock(can)}
         ${(can.punishPlayers || can.banPlayers) ? punishBlock(p, can) : ''}
@@ -847,6 +854,7 @@ function wirePlayerCard(body, card, p, can) {
     });
   }
 
+  wireDossier(card, p);
   wireReach(card, p);
   wireTools(card, p, refresh);
   wirePunish(card, p, refresh);
@@ -872,6 +880,149 @@ function wireTools(card, p, refresh) {
         msg.textContent = punishErr(err);
       } finally {
         btn.disabled = false;
+      }
+    }),
+  );
+}
+
+// Addresses, who else has used them, and any chat frozen as evidence.
+//
+// Loaded when the drawer is opened rather than with the card: it is two more
+// queries and a scan of the login history, and most of the time you came here to
+// do something else entirely.
+function wireDossier(card, p) {
+  const box = card.querySelector('#dossier');
+  if (!box) return;
+  const body = card.querySelector('#dossierbody');
+  let loaded = false;
+
+  box.addEventListener('toggle', async () => {
+    if (!box.open || loaded) return;
+    loaded = true;
+    try {
+      const d = await api.dash.dossier(p.name);
+      body.innerHTML = dossierBody(d);
+      wireSnapshots(body, p);
+    } catch {
+      loaded = false;
+      body.innerHTML = '<div class="empty">That could not be read.</div>';
+    }
+  });
+}
+
+function dossierBody(d) {
+  const logins = d.logins.filter((l) => l.login);
+  return `
+    <div class="block">
+      <div class="block-label">Addresses</div>
+      ${
+        d.addresses.length
+          ? `<div class="altrow">${d.addresses.map((a) => `<span class="permchip">${esc(a)}</span>`).join('')}</div>`
+          : '<p class="rule-text">No address on record.</p>'
+      }
+    </div>
+
+    <div class="block">
+      <div class="block-label">Shares an address with</div>
+      <p class="rule-text">Two accounts on one address is evidence, not proof — a household and a shared connection look identical from here.</p>
+      ${
+        d.sharedWith.length
+          ? `<div class="board">${d.sharedWith
+            .map((s) => `
+              <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+                <div><div class="dn">${esc(s.name)}</div><div class="dr">${s.addresses.length} address${s.addresses.length === 1 ? '' : 'es'} in common</div></div>
+                <a class="btn" href="/players?q=${encodeURIComponent(s.name)}">Look up</a>
+              </div>`)
+            .join('')}</div>`
+          : '<div class="board"><div class="empty">Nobody else has used these addresses.</div></div>'
+      }
+    </div>
+
+    <div class="block">
+      <div class="block-label">Recent connections</div>
+      ${
+        logins.length
+          ? `<div class="board">${logins.slice(0, 12)
+            .map((l) => `
+              <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+                <div class="dr mono">${esc(l.ip || 'no address')}</div>
+                <div class="dr">${esc(dateShort(l.login))}</div>
+              </div>`)
+            .join('')}</div>`
+          : '<div class="board"><div class="empty">No connections on record.</div></div>'
+      }
+    </div>
+
+    <div class="block" id="snapblock">
+      <div class="block-label">Chat evidence</div>
+      <p class="rule-text">A snapshot freezes the chat around them as it is right now, with its own short id — what turns “they were abusive” into something the next person can read.</p>
+      <div class="factions">
+        <button class="btn btn-primary" data-snap>Take a snapshot</button>
+        <span class="fmsg" data-snapmsg></span>
+      </div>
+      <div id="snaplist">${
+        d.snapshots.length
+          ? `<div class="board">${d.snapshots
+            .map((s) => `
+              <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+                <div><div class="dn mono">${esc(s.id)}</div><div class="dr">${s.at ? esc(dateShort(s.at)) : ''}</div></div>
+                <button class="btn" data-viewsnap="${esc(s.id)}">Read</button>
+              </div>`)
+            .join('')}</div>`
+          : '<div class="board"><div class="empty">No snapshots of them yet.</div></div>'
+      }</div>
+      <div id="snapview"></div>
+    </div>`;
+}
+
+// The core stores snapshot lines already coloured with § codes; they are shown
+// as the game would, because a transcript that has been stripped of who was
+// speaking in what colour is harder to read, not easier.
+function snapshotLines(lines) {
+  return lines
+    .map((l) => `<div class="snapline"><span class="dr">${l.at ? esc(dateShort(l.at)) : ''}</span> ${mcPreview(String(l.message).replace(/§/g, '&'))}</div>`)
+    .join('');
+}
+
+function wireSnapshots(body, p) {
+  const msg = body.querySelector('[data-snapmsg]');
+  const take = body.querySelector('[data-snap]');
+  if (take) {
+    take.addEventListener('click', async () => {
+      take.disabled = true;
+      msg.className = 'fmsg';
+      msg.textContent = 'Asking the core…';
+      try {
+        const { jobId } = await api.dash.takeSnapshot(p.name);
+        const row = await awaitJob(jobId, msg);
+        if (row.status === 'done') {
+          msg.className = 'fmsg ok';
+          msg.textContent = `Snapshot ${row.result} taken.`;
+        } else {
+          reportJob(msg, row, 'Taken.');
+        }
+      } catch (err) {
+        msg.className = 'fmsg bad';
+        msg.textContent = punishErr(err);
+      } finally {
+        take.disabled = false;
+      }
+    });
+  }
+
+  const view = body.querySelector('#snapview');
+  body.querySelectorAll('[data-viewsnap]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      view.innerHTML = pageLoader();
+      try {
+        const snap = await api.dash.snapshot(btn.dataset.viewsnap);
+        view.innerHTML = `
+          <div class="block">
+            <div class="block-label">${esc(snap.id)} — ${snap.at ? esc(dateShort(snap.at)) : ''}</div>
+            <div class="snapbox">${snapshotLines(snap.lines) || '<span class="dr">Nothing was said.</span>'}</div>
+          </div>`;
+      } catch {
+        view.innerHTML = '<div class="empty">That snapshot could not be read.</div>';
       }
     }),
   );

@@ -42,7 +42,7 @@ export async function renderServers(root, can) {
 
     <div id="srvlist">${
       servers.length
-        ? servers.map((s) => serverRow(s, !!can.manageNetwork)).join('')
+        ? servers.map((s) => serverRow(s, !!can.manageNetwork, !!can.runCommands)).join('')
         : '<div class="board"><div class="empty">No server has reported in yet.</div></div>'
     }</div>
 
@@ -71,6 +71,29 @@ function wireReboots(root) {
       } catch (err) { msg.className = 'fmsg bad'; msg.textContent = rebootErr(err); }
       finally { btn.disabled = false; }
     });
+
+    const cmdBtn = card.querySelector('[data-runcmd]');
+    if (cmdBtn) {
+      const cmdIn = card.querySelector('[data-cmd]');
+      const cmdMsg = card.querySelector('[data-cmdmsg]');
+      cmdBtn.addEventListener('click', async () => {
+        const command = cmdIn.value.trim();
+        if (!command) { cmdMsg.className = 'fmsg bad'; cmdMsg.textContent = 'Type a command.'; return; }
+        if (!confirm(`Run "${command}" as console on ${server}?`)) return;
+        cmdBtn.disabled = true; cmdMsg.className = 'fmsg'; cmdMsg.textContent = 'Running…';
+        try {
+          const { jobId } = await api.dash.runCommand(server, command);
+          const row = await watchJob(jobId, cmdMsg);
+          if (row.status === 'done') { cmdMsg.className = 'fmsg ok'; cmdMsg.textContent = row.result || 'Ran.'; }
+          else reportReboot(cmdMsg, row);
+        } catch (err) {
+          cmdMsg.className = 'fmsg bad';
+          cmdMsg.textContent = err?.body?.error === 'management_only'
+            ? 'Running commands is Management only.'
+            : rebootErr(err);
+        } finally { cmdBtn.disabled = false; }
+      });
+    }
 
     card.querySelector('[data-rebootcancel]').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
@@ -115,7 +138,7 @@ function rebootErr(err) {
 // Each server is a roll-out card: the line you scan, and — for anyone who may —
 // the restart controls behind it, so a button that empties a server is never a
 // thing you can hit while reading the list.
-function serverRow(s, canRestart) {
+function serverRow(s, canRestart, canCommand) {
   const pct = s.max > 0 ? Math.min(100, Math.round((s.online / s.max) * 100)) : 0;
   const head = `
     <span class="srv-dot ${s.up ? 'on' : ''}" title="${s.up ? 'Answering' : 'Not answering'}"></span>
@@ -138,6 +161,16 @@ function serverRow(s, canRestart) {
           <div class="ptile entry"><span class="pt-n">${pct}%</span><span class="pt-l">full</span></div>
           <div class="ptile entry"><span class="pt-n">${s.up ? 'up' : 'down'}</span><span class="pt-l">${esc(timeAgo(s.updatedAt))}</span></div>
         </div>
+        ${
+          s.players && s.players.length
+            ? `<div class="block">
+                 <div class="block-label">On right now</div>
+                 <div class="altrow">${s.players
+                   .map((n) => `<a class="permchip" href="/players?q=${encodeURIComponent(n)}">${esc(n)}</a>`)
+                   .join('')}</div>
+               </div>`
+            : ''
+        }
         <div class="block-label">Restart</div>
         <p class="rule-text">Uses the core's own countdown, so players get the warnings they already know. Only this server takes the job.</p>
         <div class="factions">
@@ -152,6 +185,20 @@ function serverRow(s, canRestart) {
           <button class="btn" data-rebootcancel>Cancel</button>
           <span class="fmsg" data-msg></span>
         </div>
+
+        ${
+          canCommand
+            ? `<div class="block" style="margin-top:12px">
+                 <div class="block-label">Run a command</div>
+                 <p class="rule-text">As console, on this server. This is everything the panel has no button for — and everything the core gains later. Every line is recorded against your name.</p>
+                 <div class="factions">
+                   <input class="fld fld-inline mono" data-cmd placeholder="say hello" maxlength="255">
+                   <button class="btn btn-danger" data-runcmd>Run</button>
+                   <span class="fmsg" data-cmdmsg></span>
+                 </div>
+               </div>`
+            : ''
+        }
       </div>
     </details>`;
 }

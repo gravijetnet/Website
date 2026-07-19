@@ -37,6 +37,7 @@ api.use(require('./routes/appeal'));
 api.use(require('./routes/dashboard'));
 api.use(require('./routes/moderation'));
 api.use(require('./routes/admin'));
+api.use(require('./routes/discord'));
 api.use(require('./routes/uploads'));
 app.use('/api', api);
 
