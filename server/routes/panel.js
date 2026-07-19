@@ -261,6 +261,50 @@ router.get('/dash/panel/servers/:id/activities', staff.requires('manageNetwork')
   }
 });
 
+// --- worlds ------------------------------------------------------------------
+//
+// The one thing on a Minecraft server that nobody gets back. Backing up is safe
+// and sits with the other backups; renaming moves a directory out from under a
+// running server; deleting is final. Those are three different weights and get
+// three different bars.
+
+const WORLD_NAME = /^[A-Za-z0-9 _.-]{1,64}$/;
+
+router.post('/dash/panel/servers/:id/worlds/:world/backup', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    const server = await assertManaged(req.params.id);
+    await feather.backupWorld(req.params.id, req.params.world);
+    await audit.record(req, 'panel.world_backup', server.name, { world: req.params.world });
+    res.status(202).json({ ok: true });
+  } catch (err) {
+    return fail(res, err, 'world backup');
+  }
+});
+
+router.post('/dash/panel/servers/:id/worlds/:world/rename', staff.requires('runCommands'), json, async (req, res) => {
+  const newName = String(req.body?.newName || '').trim();
+  if (!WORLD_NAME.test(newName)) return res.status(400).json({ error: 'bad_world', detail: 'That is not a world name.' });
+  try {
+    const server = await assertManaged(req.params.id);
+    await feather.renameWorld(req.params.id, req.params.world, newName);
+    await audit.record(req, 'panel.world_rename', server.name, { from: req.params.world, to: newName });
+    res.json({ ok: true });
+  } catch (err) {
+    return fail(res, err, 'world rename');
+  }
+});
+
+router.delete('/dash/panel/servers/:id/worlds/:world', staff.requires('runCommands'), async (req, res) => {
+  try {
+    const server = await assertManaged(req.params.id);
+    await feather.deleteWorld(req.params.id, req.params.world);
+    await audit.record(req, 'panel.world_delete', server.name, { world: req.params.world });
+    res.json({ ok: true });
+  } catch (err) {
+    return fail(res, err, 'world delete');
+  }
+});
+
 // --- the files on the box ----------------------------------------------------
 //
 // Reading a config is how you find out why a server is behaving oddly; editing

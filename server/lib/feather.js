@@ -147,6 +147,16 @@ const deleteBackup = (id, backupId) =>
 const worlds = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/worlds`);
 const players = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/playermanager`);
 
+// A world is the one thing on a Minecraft server nobody gets back if it goes.
+// Backing one up is safe; renaming it moves it out from under a running server;
+// deleting it is final. The console treats those as three different weights.
+const worldBase = (id, name) =>
+  `/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/worlds/${encodeURIComponent(name)}`;
+const backupWorld = (id, name) => call(`${worldBase(id, name)}/backup`, { method: 'POST' });
+const renameWorld = (id, name, newName) =>
+  call(`${worldBase(id, name)}/rename`, { method: 'POST', body: { newName } });
+const deleteWorld = (id, name) => call(worldBase(id, name), { method: 'DELETE' });
+
 // The files on the box. `files` lists a directory; `readFile` and `writeFile`
 // are how a config gets looked at and fixed without an SFTP client.
 const files = (id, dir) =>
@@ -206,4 +216,5 @@ module.exports = {
   worlds, players, nodeStatus, allocation, POWER, FeatherError,
   logs, shareLogs, activities, allocations, cleanLog,
   files, readFile, writeFile, callRaw,
+  backupWorld, renameWorld, deleteWorld,
 };

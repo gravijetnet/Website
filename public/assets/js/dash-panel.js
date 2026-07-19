@@ -13,7 +13,7 @@
 import { api } from './api.js';
 import { esc, int, timeAgo, dateShort } from './util.js';
 import { pageLoader, notice } from './components.js';
-import { ask, confirmDanger } from './modal.js';
+import { ask, confirmDanger, askText } from './modal.js';
 
 // The panel's own trouble, said as whose problem it is. `ip_not_allowed` earns
 // its own sentence: it is the one failure whose fix is a setting in the panel
@@ -335,17 +335,59 @@ function editorPane(path, content, canWrite) {
     </div>`;
 }
 
-function worldsPane(d) {
+function worldsPane(d, canWrite) {
   if (!d.worlds.length) return '<div class="board"><div class="empty">No worlds reported.</div></div>';
-  return `<div class="board">${d.worlds
-    .map(
-      (w) => `
-      <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
-        <div><div class="dn">${esc(w.name)}</div><div class="dr">${w.modified ? `changed ${timeAgo(w.modified)}` : ''}</div></div>
-        <div class="dr">${bytes(w.bytes)}</div>
+  return `
+    <div class="board">
+      ${d.worlds
+        .map(
+          (w) => `
+      <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px" data-world="${esc(w.name)}">
+        <div style="min-width:0">
+          <div class="dn">${esc(w.name)}</div>
+          <div class="dr">${bytes(w.bytes)}${w.modified ? ` · changed ${timeAgo(w.modified)}` : ''}</div>
+        </div>
+        <div class="urow-right">
+          <button class="btn ed-mini" data-wbackup>Back up</button>
+          ${canWrite ? '<button class="btn ed-mini" data-wrename>Rename</button>' : ''}
+          ${canWrite ? '<button class="btn ed-mini ed-del" data-wdelete>Delete</button>' : ''}
+        </div>
       </div>`,
-    )
-    .join('')}</div>`;
+        )
+        .join('')}
+    </div>
+    <span class="fmsg" data-wmsg></span>
+    <p class="rule-text re-hint">A world is the one thing here nobody gets back. Renaming moves it out from under a running server; deleting is final.</p>`;
+}
+
+function wireWorlds(slot, id, canWrite) {
+  const msg = slot.querySelector('[data-wmsg]');
+  const say = (cls, text) => { msg.className = `fmsg ${cls}`.trim(); msg.textContent = text; };
+
+  slot.querySelectorAll('[data-world]').forEach((row) => {
+    const world = row.dataset.world;
+
+    row.querySelector('[data-wbackup]')?.addEventListener('click', async () => {
+      say('', `Backing up ${world}…`);
+      try { await api.dash.panelWorldBackup(id, world); say('ok', `${world} is being backed up.`); }
+      catch (err) { say('bad', panelErr(err)); }
+    });
+
+    row.querySelector('[data-wrename]')?.addEventListener('click', async () => {
+      const newName = await askText(`Rename ${world}`, 'The server keeps using the old directory until it restarts.');
+      if (!newName) return;
+      say('', 'Renaming…');
+      try { await api.dash.panelWorldRename(id, world, newName); say('ok', `Renamed to ${newName}.`); }
+      catch (err) { say('bad', panelErr(err)); }
+    });
+
+    row.querySelector('[data-wdelete]')?.addEventListener('click', async () => {
+      if (!await confirmDanger(`Delete the world ${world}?`, 'This is final. Take a backup first if there is any doubt at all.', 'Delete it')) return;
+      say('', 'Deleting…');
+      try { await api.dash.panelWorldDelete(id, world); row.remove(); say('ok', `${world} is gone.`); }
+      catch (err) { say('bad', panelErr(err)); }
+    });
+  });
 }
 
 function playersPane(d) {
@@ -453,7 +495,8 @@ function wirePanel(root, can) {
             slot.innerHTML = backupsPane(await api.dash.panelBackups(id), can);
             wireBackups(slot, id, can);
           } else if (what === 'worlds') {
-            slot.innerHTML = worldsPane(await api.dash.panelWorlds(id));
+            slot.innerHTML = worldsPane(await api.dash.panelWorlds(id), !!can.runCommands);
+            wireWorlds(slot, id, !!can.runCommands);
           } else {
             slot.innerHTML = playersPane(await api.dash.panelPlayers(id));
           }

@@ -31,7 +31,12 @@ function onKey(e) {
     close(open.cancelValue);
   } else if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
     e.preventDefault();
-    close(open.confirmValue);
+    // This listener is on the capture phase, so it sees Enter before any field
+    // inside the dialog does. A dialog that asks for a value therefore has to be
+    // resolved from the field here, or it would answer `undefined` to the very
+    // question it was opened to ask.
+    const field = open.el.querySelector('[data-text]');
+    close(field ? (field.value.trim() || null) : open.confirmValue);
   } else if (e.key === 'Tab') {
     // A dialog you can tab out of is a dialog that is not really modal — the
     // focus wraps inside it instead.
@@ -84,6 +89,48 @@ export function ask({
     // Focus the safe choice, so a reflexive Enter never destroys anything.
     const safe = danger ? el.querySelector('[data-no]') : el.querySelector('[data-yes]');
     (safe || el.querySelector('[data-yes]')).focus();
+  });
+}
+
+/**
+ * Asking for a value rather than a yes. Resolves with the text, or null if they
+ * backed out — the browser's prompt() has the same shape and all the same
+ * problems as its confirm().
+ */
+export function askText(title, body = '', { placeholder = '', value = '', confirmLabel = 'OK' } = {}) {
+  if (open) close(null);
+
+  return new Promise((resolve) => {
+    const el = document.createElement('div');
+    el.className = 'modal-back';
+    el.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <div class="modal-head">${esc(title)}</div>
+        ${body ? `<div class="modal-body">${esc(body)}</div>` : ''}
+        <div class="modal-body" style="padding-top:0">
+          <input class="fld" data-text value="${esc(value)}" placeholder="${esc(placeholder)}" maxlength="200">
+        </div>
+        <div class="modal-acts">
+          <button class="btn" data-no>Cancel</button>
+          <button class="btn btn-primary" data-yes>${esc(confirmLabel)}</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(el);
+    const field = el.querySelector('[data-text]');
+    // Enter confirms with whatever is typed; Escape and Cancel both mean null.
+    // cancelValue is null for both Escape and the darkened area; Enter is
+    // resolved from the field by onKey, which sees it first.
+    open = { el, resolve, restore: document.activeElement, confirmValue: null, cancelValue: null };
+
+    const done = (ok) => close(ok ? field.value.trim() || null : null);
+    el.querySelector('[data-yes]').addEventListener('click', () => done(true));
+    el.querySelector('[data-no]').addEventListener('click', () => done(false));
+    el.addEventListener('mousedown', (e) => { if (e.target === el) done(false); });
+    document.addEventListener('keydown', onKey, true);
+
+    field.focus();
+    field.select();
   });
 }
 
