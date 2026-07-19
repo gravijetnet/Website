@@ -54,7 +54,13 @@ config backups with restore.
 **Records** — every command run, every line of chat, searchable by player or by
 text; who has signed in; per-person access overrides.
 
-**The host** (FeatherPanel) — every server with its state, memory, disk and node;
+**The host** (FeatherPanel) — the nine servers this network owns (an allowlist,
+enforced on every call, not just used to filter the list); live node meters —
+memory, CPU, disk, swap, load; per-server TPS and JVM heap published by our own
+plugin, since the panel can only report what a container was *allocated*; the
+container console with mclo.gs sharing; a file browser and config editor;
+address and ports; worlds with backup/rename/delete; and what the panel itself
+recorded. Older text: every server with its state, memory, disk and node;
 power start/restart/stop/kill; the container's own console; backups taken,
 restored and deleted; worlds; and each box's operators, whitelist and vanilla
 bans. Distinct from Phoenix on purpose: a restart here takes the container away,
