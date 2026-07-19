@@ -1268,3 +1268,8 @@ textarea.fld.mono { line-height: 1.45; }
   font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
   color: var(--mc-gray);
 }
+
+/* Tick rate, where twenty is perfect and the colour is the whole message. */
+.tps { font-size: 16px; color: var(--mc-green); text-shadow: 2px 2px 0 #153f15; }
+.tps.warm { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+.tps.hot { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }

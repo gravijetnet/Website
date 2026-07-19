@@ -136,16 +136,72 @@ function rebootErr(err) {
   return 'That did not go through.';
 }
 
+// Twenty ticks a second is the whole game running on time. Below eighteen you
+// can feel it; below fifteen players are complaining before anybody checks.
+function tpsBand(tps) {
+  if (tps >= 19) return '';
+  if (tps >= 16) return 'warm';
+  return 'hot';
+}
+
+// What the server itself says about its own health — published by the plugin
+// standing inside it, so this is the process's real memory rather than the
+// ceiling the host allocated the container.
+function serverMeters(s) {
+  if (!s.up) return '';
+  const parts = [];
+  if (s.tps !== null && s.tps !== undefined) {
+    parts.push(meter('Ticks', s.tps, 20, `${s.tps.toFixed(1)} of 20 TPS`, tpsBand(s.tps)));
+  }
+  if (s.heap && s.heap.max) {
+    const gb = (b) => `${(b / 1073741824).toFixed(1)} GB`;
+    parts.push(meter('Heap', s.heap.used, s.heap.max, `${gb(s.heap.used)} of ${gb(s.heap.max)}`));
+  }
+  if (s.max) parts.push(meter('Players', s.online, s.max, `${int(s.online)} of ${int(s.max)}`));
+  if (!parts.length) return '';
+  return `<div class="block"><div class="block-label">Right now</div>${parts.join('')}${
+    s.uptimeMs ? `<p class="rule-text">Up for ${esc(uptime(s.uptimeMs))}.</p>` : ''
+  }</div>`;
+}
+
+function uptime(ms) {
+  const h = Math.floor(ms / 3600000);
+  const d = Math.floor(h / 24);
+  if (d >= 1) return `${d} day${d === 1 ? '' : 's'}`;
+  if (h >= 1) return `${h} hour${h === 1 ? '' : 's'}`;
+  return `${Math.max(1, Math.round(ms / 60000))} minutes`;
+}
+
+// The same meter the host page uses. Bands are passed in where the scale is not
+// "more is worse" — a full tick rate is good and a full heap is not.
+function meter(label, used, total, text, forcedBand) {
+  const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const band = forcedBand !== undefined ? forcedBand : (pct >= 90 ? 'hot' : pct >= 70 ? 'warm' : '');
+  return `
+    <div class="meter">
+      <div class="meter-top">
+        <span class="meter-l">${esc(label)}</span>
+        <span class="meter-v">${esc(text)}</span>
+        <span class="meter-p ${band}">${Math.round(pct)}%</span>
+      </div>
+      <div class="meter-bar"><span class="${band}" style="width:${pct.toFixed(1)}%"></span></div>
+    </div>`;
+}
+
 // Each server is a roll-out card: the line you scan, and — for anyone who may —
 // the restart controls behind it, so a button that empties a server is never a
 // thing you can hit while reading the list.
 function serverRow(s, canRestart, canCommand) {
   const pct = s.max > 0 ? Math.min(100, Math.round((s.online / s.max) * 100)) : 0;
+  // No status word: the dot is the status, and repeating it as "up" beside a
+  // green light is the same fact twice. The title carries it for a screen reader
+  // and for anyone who hovers.
   const head = `
     <span class="srv-dot ${s.up ? 'on' : ''}" title="${s.up ? 'Answering' : 'Not answering'}"></span>
     <span class="cs-name">${esc(s.name)}</span>
     ${s.whitelisted ? '<span class="re-tag">closed</span>' : ''}
     <span class="dr">${s.group ? esc(s.group) : ''}</span>
+    ${s.tps !== null && s.tps !== undefined && s.up ? `<span class="tps ${tpsBand(s.tps)}">${s.tps.toFixed(1)} TPS</span>` : ''}
     <span class="cs-meta">${s.up ? `${int(s.online)} / ${int(s.max)}` : `last seen ${timeAgo(s.updatedAt)}`}</span>`;
 
   if (!canRestart) {
@@ -162,6 +218,8 @@ function serverRow(s, canRestart, canCommand) {
           <div class="ptile entry"><span class="pt-n">${pct}%</span><span class="pt-l">full</span></div>
           <div class="ptile entry"><span class="pt-n">${s.up ? 'up' : 'down'}</span><span class="pt-l">${esc(timeAgo(s.updatedAt))}</span></div>
         </div>
+        ${serverMeters(s)}
+
         ${
           s.players && s.players.length
             ? `<div class="block">

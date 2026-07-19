@@ -610,14 +610,16 @@ router.get('/dash/servers', staff.requires('viewReports'), async (req, res) => {
   try {
     const sqlLib = require('../lib/sql');
     const COLUMNS = '`name`, `server_group`, `online`, `max_players`, `whitelisted`, `updated_at`';
+    const EXTRA = '`players`, `tps`, `heap_used`, `heap_max`, `uptime_ms`';
     let rows;
     try {
       rows = await sqlLib.query(
         'phoenix',
-        `SELECT ${COLUMNS}, \`players\` FROM \`network_servers\` ORDER BY \`server_group\`, \`name\``,
+        `SELECT ${COLUMNS}, ${EXTRA} FROM \`network_servers\` ORDER BY \`server_group\`, \`name\``,
       );
     } catch (e) {
-      // A server on the build before the name list publishes everything else.
+      // A server still on an older build publishes the basics and none of the
+      // rest; the page then simply has less to show rather than erroring.
       if (!(e && (e.code === 'ER_BAD_FIELD_ERROR' || e.errno === 1054))) throw e;
       rows = await sqlLib.query(
         'phoenix',
@@ -636,6 +638,12 @@ router.get('/dash/servers', staff.requires('viewReports'), async (req, res) => {
           max: Number(r.max_players) || 0,
           whitelisted: !!r.whitelisted,
           players: String(r.players || '').split('\n').map((s) => s.trim()).filter(Boolean),
+          // What the server itself reports about its own health. The panel can
+          // say what a container was allocated; only this says whether the
+          // server inside it is keeping up.
+          tps: r.tps === undefined ? null : Number(r.tps) || 0,
+          heap: r.heap_max ? { used: Number(r.heap_used) || 0, max: Number(r.heap_max) || 0 } : null,
+          uptimeMs: r.uptime_ms === undefined ? null : Number(r.uptime_ms) || 0,
           updatedAt: at,
           up: now - at < 60000,
         };

@@ -146,10 +146,9 @@ function serverCard(s, can) {
   return `
     <details class="panel entry card-roll host-card" data-server="${esc(s.id)}">
       <summary class="card-sum">
-        <span class="srv-dot ${s.status === 'running' ? 'on' : ''} ${s.status === 'starting' ? 'warm' : ''}"></span>
+        <span class="srv-dot ${s.status === 'running' ? 'on' : ''} ${s.status === 'starting' ? 'warm' : ''}" title="${esc(state)}"></span>
         <span class="cs-name">${esc(s.name)}</span>
         ${s.suspended ? '<span class="re-tag">suspended</span>' : ''}
-        <span class="dr">${esc(state)}</span>
         <span class="cs-meta">${s.memory ? `${(s.memory / 1024).toFixed(s.memory % 1024 ? 1 : 0)} GB` : '—'} · ${s.cpu || 0}% CPU</span>
       </summary>
       <div class="panel-body">
