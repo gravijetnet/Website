@@ -44,7 +44,10 @@ function isMissingTable(err) {
 // What the executor knows how to do. The website must never be able to ask for
 // something the plugin will not recognise — an unknown action would sit pending
 // forever and look like a punishment that quietly failed.
-const ACTIONS = new Set(['ban', 'mute', 'kick', 'blacklist', 'revoke', 'grant', 'ungrant']);
+// `alert` has no target — it is the core's own staff broadcast — but it rides
+// this queue rather than the fan-out one because Phoenix propagates it itself,
+// so exactly one server may send it. See ActionQueue.alert.
+const ACTIONS = new Set(['ban', 'mute', 'kick', 'blacklist', 'revoke', 'grant', 'ungrant', 'alert']);
 
 // Phoenix's own ceiling, from settings.yml (`max-temp-duration: 365d`). Asking
 // for longer is asking for something the core will refuse.

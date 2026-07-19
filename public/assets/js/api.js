@@ -134,9 +134,19 @@ export const api = {
     commandLogs: (q, limit) => get(`/dash/logs/commands?q=${encodeURIComponent(q || '')}&limit=${limit || 100}`),
     chatLogs: (q, limit) => get(`/dash/logs/chat?q=${encodeURIComponent(q || '')}&limit=${limit || 100}`),
 
-    // Announcements to the game (routes/moderation).
+    // Announcements to the game (routes/moderation). kind 'staff' becomes the
+    // core's own prefixed alert; 'all' a network-wide announcement.
     broadcast: (kind, message) => send('/dash/broadcast', 'POST', { kind, message }),
     broadcasts: () => get('/dash/broadcasts'),
+
+    // Reaching one player where they are standing.
+    playerMessage: (name, message) => send('/dash/player/message', 'POST', { name, message }),
+    playerSend: (name, server) => send('/dash/player/send', 'POST', { name, server }),
+
+    // The network as it is right now, and the switch that closes it.
+    servers: () => get('/dash/servers'),
+    maintenance: (on) => send('/dash/maintenance', 'POST', { on }),
+    whitelist: (name, add) => send('/dash/whitelist', 'POST', { name, add }),
 
     // Everyone who has signed in (routes/admin).
     users: () => get('/dash/users'),

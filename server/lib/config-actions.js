@@ -30,7 +30,12 @@ function isMissingTable(err) {
   return err && (err.code === 'ER_NO_SUCH_TABLE' || err.errno === 1146);
 }
 
-const ACTIONS = new Set(['rank_create', 'rank_update', 'rank_delete', 'ladder_update']);
+const ACTIONS = new Set([
+  'rank_create', 'rank_update', 'rank_delete', 'ladder_update',
+  // Maintenance: closing and opening the network, and who gets through while it
+  // is shut. The core decides who is exempt; these only flip the switch.
+  'whitelist_on', 'whitelist_off', 'whitelist_add', 'whitelist_remove',
+]);
 
 /**
  * Queues a config edit and returns its id. The route decides whether the caller

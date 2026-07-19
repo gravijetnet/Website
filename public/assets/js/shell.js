@@ -71,18 +71,23 @@ const PLAYER_TAB_OF = {
 
 // The console's tabs, each gated on an ability the server also enforces. Hiding
 // a tab is a courtesy, not the check: /api refuses regardless of what is drawn.
+// `header: true` is the shift-work set — the five places a moderator actually
+// moves between during a shift, and all the strip carries. Eleven tabs up there
+// was a row you could not read, let alone hit; everything else is reached from
+// the console's own front page, which is a menu of them. See hubGrid in
+// dash-staff. Every page still has a real address, so nothing is buried.
 export const STAFF_TABS = [
-  { key: '', label: 'Queue', need: 'viewReports' },
-  { key: 'applications', label: 'Applications', need: 'viewApplications' },
-  { key: 'reports', label: 'Reports', need: 'viewReports' },
-  { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
-  { key: 'players', label: 'Players', need: 'viewPlayers' },
+  { key: '', label: 'Queue', need: 'viewReports', header: true },
+  { key: 'applications', label: 'Applications', need: 'viewApplications', header: true },
+  { key: 'reports', label: 'Reports', need: 'viewReports', header: true },
+  { key: 'appeals', label: 'Appeals', need: 'viewAppeals', header: true },
+  { key: 'players', label: 'Players', need: 'viewPlayers', header: true },
   { key: 'users', label: 'Users', need: 'viewPlayers' },
   { key: 'logs', label: 'Logs', need: 'viewReports' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
   // A hub, not a page — see NETWORK_PAGES. Shown to anybody who can reach at
   // least one thing inside it.
-  { key: 'network', label: 'Network', anyOf: ['manageNetwork', 'broadcast'] },
+  { key: 'network', label: 'Network', anyOf: ['manageNetwork', 'broadcast', 'viewReports'] },
   { key: 'access', label: 'Access', need: 'manageAccess' },
   { key: 'audit', label: 'Audit', need: 'viewReports' },
 ];
@@ -92,6 +97,9 @@ export const STAFF_TABS = [
 // destination with its own row of pages they are a place you go, and then choose
 // what you are changing.
 export const NETWORK_PAGES = [
+  // The overview comes first, and is open to anyone who can read a report — what
+  // the network is doing right now is not privileged information among staff.
+  { key: 'servers', label: 'Servers', need: 'viewReports' },
   { key: 'ranks', label: 'Ranks', need: 'manageNetwork' },
   { key: 'ladders', label: 'Ladders', need: 'manageNetwork' },
   { key: 'reportmenu', label: 'Report menu', need: 'manageNetwork' },
@@ -258,7 +266,7 @@ function staffChrome() {
 export function paintStaffTabs(can = {}) {
   const box = document.getElementById('stabs');
   if (!box) return;
-  box.innerHTML = STAFF_TABS.filter((t) => tabAllowed(t, can))
+  box.innerHTML = STAFF_TABS.filter((t) => t.header && tabAllowed(t, can))
     .map((t) => `<a href="/${t.key}" data-match="/${t.key}">${esc(t.label)}</a>`)
     .join('');
   markActive(location.pathname);

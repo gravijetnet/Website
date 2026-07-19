@@ -10,6 +10,7 @@ const audit = require('../lib/audit');
 const links = require('../lib/links');
 const actions = require('../lib/actions');
 const broadcasts = require('../lib/broadcasts');
+const configActions = require('../lib/config-actions');
 const discordtasks = require('../lib/discordtasks');
 const playersLib = require('../lib/players');
 const phoenix = require('../lib/phoenix');
@@ -290,23 +291,164 @@ router.post('/dash/grant', staff.requires('manageRanks'), json, async (req, res)
 
 // --- broadcasting -----------------------------------------------------------
 
-// A message to everyone in game (or everyone on staff). The plugin fans it out
-// to every server; this only writes it down and records who sent it.
+// Phoenix's console, for actions that are not on anybody's behalf.
+const CONSOLE_UUID = '00000000-0000-0000-0000-000000000000';
+
+// A message to everyone in game, or a staff alert.
+//
+// The two take different roads on purpose. An alert is the core's own — it goes
+// through Phoenix's staff channel, prefixed the way the game prefixes it, and
+// Phoenix carries it to every server and proxy itself; so exactly one server may
+// send it, which is what the claimed queue guarantees. A message to *everyone*
+// has no such call in the core, so it stays a fan-out row that each server shows
+// to its own players once.
 router.post('/dash/broadcast', staff.requires('broadcast'), json, async (req, res) => {
   const kind = String(req.body?.kind || 'all');
-  if (!broadcasts.KINDS.has(kind)) return res.status(400).json({ error: 'bad_kind' });
+  if (!['all', 'staff'].includes(kind)) return res.status(400).json({ error: 'bad_kind' });
 
   const message = String(req.body?.message || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 512);
   if (!message) return res.status(400).json({ error: 'message_required' });
 
   try {
-    const id = await broadcasts.enqueue({ kind, message, actorLabel: label(req) });
+    const id = kind === 'staff'
+      ? await actions.enqueue({
+        action: 'alert',
+        targetUuid: CONSOLE_UUID,
+        reason: message,
+        actorUuid: await actorUuid(req),
+        actorLabel: label(req),
+      })
+      : await broadcasts.enqueue({ kind: 'all', message, actorLabel: label(req) });
+
     await audit.record(req, `broadcast.${kind}`, 'network', { message, id });
-    res.status(202).json({ ok: true, id });
+    res.status(202).json({ ok: true, id, via: kind === 'staff' ? 'alert' : 'broadcast' });
   } catch (err) {
     if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
     console.error('[dash broadcast]', err);
     res.status(500).json({ error: 'broadcast_failed' });
+  }
+});
+
+// --- reaching one player ----------------------------------------------------
+//
+// Both of these are fan-out rows rather than claimed jobs: every server reads
+// them and only the one the player is actually connected to acts, so nothing has
+// to work out which box they are on first.
+
+router.post('/dash/player/message', staff.requires('punishPlayers'), json, async (req, res) => {
+  const message = String(req.body?.message || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 512);
+  if (!message) return res.status(400).json({ error: 'message_required' });
+  try {
+    const identity = await playersLib.byName(String(req.body?.name || '').trim());
+    if (!identity) return res.status(404).json({ error: 'unknown_player' });
+    const id = await broadcasts.enqueue({
+      kind: 'player', message, targetUuid: identity.uuid, actorLabel: label(req),
+    });
+    await audit.record(req, 'player.message', identity.uuid, { name: identity.name, message, id });
+    res.status(202).json({ ok: true, id });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash player message]', err);
+    res.status(500).json({ error: 'message_failed' });
+  }
+});
+
+router.post('/dash/player/send', staff.requires('punishPlayers'), json, async (req, res) => {
+  const server = String(req.body?.server || '').trim().slice(0, 64);
+  if (!server || !/^[A-Za-z0-9_-]{1,64}$/.test(server)) return res.status(400).json({ error: 'bad_server' });
+  try {
+    const identity = await playersLib.byName(String(req.body?.name || '').trim());
+    if (!identity) return res.status(404).json({ error: 'unknown_player' });
+    const id = await broadcasts.enqueue({
+      kind: 'send', message: server, targetUuid: identity.uuid, actorLabel: label(req),
+    });
+    await audit.record(req, 'player.send', identity.uuid, { name: identity.name, server, id });
+    res.status(202).json({ ok: true, id });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash player send]', err);
+    res.status(500).json({ error: 'send_failed' });
+  }
+});
+
+// --- the network, as it is right now ---------------------------------------
+
+// Each server publishes its own row every ten seconds (see ServerPublisher). A
+// row nobody has touched in a minute is a server that stopped, which is worth
+// showing as plainly as one that is up.
+router.get('/dash/servers', staff.requires('viewReports'), async (req, res) => {
+  try {
+    const rows = await require('../lib/sql').query(
+      'phoenix',
+      'SELECT `name`, `server_group`, `online`, `max_players`, `whitelisted`, `updated_at`'
+        + ' FROM `network_servers` ORDER BY `server_group`, `name`',
+    );
+    const now = Date.now();
+    res.json({
+      installed: true,
+      servers: rows.map((r) => {
+        const at = new Date(r.updated_at).getTime();
+        return {
+          name: r.name,
+          group: r.server_group || null,
+          online: Number(r.online) || 0,
+          max: Number(r.max_players) || 0,
+          whitelisted: !!r.whitelisted,
+          updatedAt: at,
+          up: now - at < 60000,
+        };
+      }),
+    });
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE' || err.errno === 1146) {
+      return res.json({ installed: false, servers: [] });
+    }
+    console.error('[dash servers]', err);
+    res.status(500).json({ error: 'servers_unavailable' });
+  }
+});
+
+// --- maintenance ------------------------------------------------------------
+
+// The switch that closes the network. Who still gets through is the core's
+// decision (it has a whitelist rank for exactly that) — this only flips it.
+router.post('/dash/maintenance', staff.requires('manageNetwork'), json, async (req, res) => {
+  const on = req.body?.on === true || req.body?.on === 'true';
+  try {
+    const jobId = await configActions.enqueue({
+      action: on ? 'whitelist_on' : 'whitelist_off',
+      subject: 'network',
+      payload: '',
+      actorUuid: null,
+      actorLabel: label(req),
+    });
+    await audit.record(req, `maintenance.${on ? 'on' : 'off'}`, 'network', { jobId });
+    res.status(202).json({ ok: true, jobId });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash maintenance]', err);
+    res.status(500).json({ error: 'maintenance_failed' });
+  }
+});
+
+router.post('/dash/whitelist', staff.requires('manageNetwork'), json, async (req, res) => {
+  const add = req.body?.add === true || req.body?.add === 'true';
+  const name = String(req.body?.name || '').trim().slice(0, 32);
+  if (!name || !/^[A-Za-z0-9_]{1,32}$/.test(name)) return res.status(400).json({ error: 'bad_name' });
+  try {
+    const jobId = await configActions.enqueue({
+      action: add ? 'whitelist_add' : 'whitelist_remove',
+      subject: name,
+      payload: '',
+      actorUuid: null,
+      actorLabel: label(req),
+    });
+    await audit.record(req, `whitelist.${add ? 'add' : 'remove'}`, name, { jobId });
+    res.status(202).json({ ok: true, jobId });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash whitelist]', err);
+    res.status(500).json({ error: 'whitelist_failed' });
   }
 });
 

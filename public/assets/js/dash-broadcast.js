@@ -9,6 +9,11 @@ import { esc, timeAgo } from './util.js';
 import { pageLoader, notice } from './components.js';
 import { mcPreview } from './dash-network.js';
 
+// The prefix Phoenix puts in front of its own staff alerts. Kept here only so
+// the preview matches what the game will actually print; the plugin is what
+// applies it, and it is the core that sends the line.
+const ALERT_PREFIX = '&8[&4Alert&8] &r';
+
 export async function renderBroadcast(root) {
   root.innerHTML = pageLoader();
   let data;
@@ -32,10 +37,11 @@ export async function renderBroadcast(root) {
         <input class="fld" id="bcmsg" placeholder="&aThe server restarts in 5 minutes." maxlength="512" autocomplete="off">
       </label>
       <div class="bcprev" id="bcprev"><span class="dr">Preview appears here.</span></div>
+      <p class="rule-text re-hint" id="bchint"></p>
       <div class="prow">
         <select class="fld" id="bckind">
-          <option value="all">Everyone</option>
-          <option value="staff">Staff only</option>
+          <option value="all">Everyone — a network-wide announcement</option>
+          <option value="staff">Staff alert — the core’s own</option>
         </select>
         <button class="btn btn-primary" id="bcsend">Send</button>
         <span class="fmsg" id="bcm"></span>
@@ -48,9 +54,22 @@ export async function renderBroadcast(root) {
 
   const input = root.querySelector('#bcmsg');
   const prev = root.querySelector('#bcprev');
-  input.addEventListener('input', () => {
-    prev.innerHTML = input.value ? mcPreview(input.value) : '<span class="dr">Preview appears here.</span>';
-  });
+  const kindSel = root.querySelector('#bckind');
+  const hint = root.querySelector('#bchint');
+
+  // A staff alert is prefixed by the core, so the preview shows it prefixed —
+  // otherwise you are composing one line and sending another.
+  const redraw = () => {
+    const staffKind = kindSel.value === 'staff';
+    const line = (staffKind ? ALERT_PREFIX : '') + input.value;
+    prev.innerHTML = input.value ? mcPreview(line) : '<span class="dr">Preview appears here.</span>';
+    hint.textContent = staffKind
+      ? 'Sent through Phoenix’s own staff channel, so it reaches staff on every server and proxy.'
+      : 'Shown once to every player on every server.';
+  };
+  input.addEventListener('input', redraw);
+  kindSel.addEventListener('change', redraw);
+  redraw();
 
   const btn = root.querySelector('#bcsend');
   const msg = root.querySelector('#bcm');

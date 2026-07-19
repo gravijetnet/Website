@@ -117,7 +117,12 @@ body {
 img { display: block; max-width: 100%; image-rendering: pixelated; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; border: none; background: none; color: inherit; }
-::selection { background: var(--mc-green); color: #000; }
+/* Every bit of text on this site carries a hard pixel shadow. Left on through a
+   selection it smears the glyphs across the highlight and the words stop being
+   readable at exactly the moment somebody is trying to copy them — so the shadow
+   comes off, and the highlight is a flat block with real contrast under it. */
+::selection { background: var(--mc-green); color: #000; text-shadow: none; }
+::-moz-selection { background: var(--mc-green); color: #000; text-shadow: none; }
 a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--mc-white); outline-offset: 2px; }
 
 /* ----------------------------------------------------------------- cursors */
@@ -1129,3 +1134,27 @@ textarea.fld.mono { line-height: 1.45; }
 
 .logbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .logbar .lb-tabs { flex-shrink: 0; }
+
+/* ------------------------------------------------- the console's front page */
+/* The strip carries the five places a shift moves between. This carries all of
+   them, with a line each saying what it is for — a menu, not eleven nouns. */
+.hubgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.hubcard {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 2px solid var(--slot-lo); background: #0d0d0d;
+}
+.hubcard:hover { border-color: var(--mc-white); background: #151515; }
+.hubcard .glyph { color: var(--mc-gold); flex-shrink: 0; }
+.hub-t { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; }
+.hub-d { font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+
+/* A suggestion list that belongs to its field rather than to the header: full
+   width of the input, directly beneath it. */
+.suggest-wrap { position: relative; }
+.suggest-wrap .search-results { left: 0; right: auto; width: 100%; top: 100%; margin-top: 2px; }
+
+/* A server, at a glance: is it answering, and how full is it. */
+.srv-dot { width: 10px; height: 10px; flex-shrink: 0; display: inline-block; background: var(--mc-dark-gray); }
+.srv-dot.on { background: var(--mc-green); }
+.srv-bar { width: 90px; height: 10px; flex-shrink: 0; background: #000; border: 2px solid var(--slot-lo); }
+.srv-bar span { display: block; height: 100%; background: var(--mc-green); }

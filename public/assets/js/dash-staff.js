@@ -24,6 +24,8 @@ import {
 import { renderUsers } from './dash-users.js';
 import { renderBroadcast } from './dash-broadcast.js';
 import { renderLogs } from './dash-logs.js';
+import { renderServers } from './dash-servers.js';
+import { attachPlayerSuggest } from './suggest.js';
 
 const SITE = 'https://example.invalid';
 
@@ -65,7 +67,14 @@ export async function renderStaffDash(root, tab, sub) {
     return;
   }
 
-  root.innerHTML = `<section class="section"><div class="container"><div id="cbody">${pageLoader()}</div></div></section>`;
+  // Every page but the front one gets a way back to it. The mark top-left leaves
+  // for example.invalid, so without this the pages off the strip would be places you
+  // could reach and not leave.
+  root.innerHTML = `
+    <section class="section"><div class="container">
+      ${active.key ? '<a class="crumb" href="/">Spielplatz</a>' : ''}
+      <div id="cbody">${pageLoader()}</div>
+    </div></section>`;
   const body = root.querySelector('#cbody');
 
   try {
@@ -110,7 +119,8 @@ async function paintNetwork(body, can, sub) {
     <div id="npage">${pageLoader()}</div>`;
 
   const npage = body.querySelector('#npage');
-  if (page.key === 'ranks') await renderRanks(npage, can);
+  if (page.key === 'servers') await renderServers(npage, can);
+  else if (page.key === 'ranks') await renderRanks(npage, can);
   else if (page.key === 'ladders') await renderLadders(npage, can);
   else if (page.key === 'reportmenu') await renderReportMenu(npage, can);
   else if (page.key === 'filters') await renderFilters(npage, can);
@@ -141,6 +151,49 @@ function filters(current, options, base) {
 
 function statusOf() {
   return new URLSearchParams(location.search).get('status') || '';
+}
+
+// --- the console's own front page ------------------------------------------
+
+// What each destination is for, in the words somebody would use to ask for it.
+// A menu of eleven bare nouns is a puzzle; this is a menu.
+const HUB = {
+  applications: { icon: 'staff', desc: 'Who has asked to join the team' },
+  reports: { icon: 'report', desc: 'What players have filed against each other' },
+  appeals: { icon: 'shield', desc: 'Punishments being contested' },
+  players: { icon: 'search', desc: 'Look anyone up, punish, lift, promote' },
+  users: { icon: 'users', desc: 'Everyone who has signed in to the site' },
+  logs: { icon: 'clock', desc: 'Every command run and every line said' },
+  rules: { icon: 'rules', desc: 'Edit the public rulebook' },
+  network: { icon: 'bolt', desc: 'Ranks, ladders, filters, tags, broadcasts, backups' },
+  access: { icon: 'shield', desc: 'Who can do what in here' },
+  audit: { icon: 'clock', desc: 'Every decision made here, against a name' },
+};
+
+// The strip carries the five places a shift moves between; this carries all of
+// them, so nothing is one tab-strip overflow away from being unreachable.
+function hubGrid(can) {
+  const cards = STAFF_TABS.filter((t) => t.key && tabAllowed(t, can));
+  if (!cards.length) return '';
+  return `
+    <div class="block">
+      <div class="block-label">Everywhere in Spielplatz</div>
+      <div class="hubgrid">
+        ${cards
+          .map((t) => {
+            const h = HUB[t.key] || { icon: 'shield', desc: '' };
+            return `
+          <a class="hubcard entry" href="/${t.key}">
+            <div class="glyph glyph-sm">${icons[h.icon] || icons.shield}</div>
+            <div style="min-width:0">
+              <div class="hub-t">${esc(t.label)}</div>
+              <div class="hub-d">${esc(h.desc)}</div>
+            </div>
+          </a>`;
+          })
+          .join('')}
+      </div>
+    </div>`;
 }
 
 // --- the queue -------------------------------------------------------------
@@ -193,6 +246,8 @@ async function paintQueue(body, can, me) {
             .join('')
         : `<div class="board"><div class="empty">The queue is empty. Nothing is waiting on you.</div></div>`
     }</div>
+
+    ${hubGrid(can)}
 
     ${
       stats
@@ -473,8 +528,10 @@ async function paintPlayers(body, can) {
       <div class="panel-body">
         <div class="frow">
           <label class="flabel" for="pq">Look up a player</label>
-          <input class="fld" id="pq" type="text" maxlength="32" placeholder="Start typing a name" value="${esc(q)}" list="pqac" autocomplete="off" spellcheck="false">
-          <datalist id="pqac"></datalist>
+          <div class="suggest-wrap">
+            <input class="fld" id="pq" type="text" maxlength="32" placeholder="Start typing a name — Tab completes" value="${esc(q)}" autocomplete="off" spellcheck="false">
+            <div class="search-results" id="pqr"></div>
+          </div>
         </div>
         <div class="factions"><button class="btn btn-primary" id="look">Look up</button><span class="fmsg" id="pmsg"></span></div>
       </div>
@@ -509,21 +566,9 @@ async function paintPlayers(body, can) {
     if (e.key === 'Enter') look();
   });
 
-  // Autocomplete from the same search the site uses. A datalist keeps it native
-  // — nothing to build or dismiss — and it only offers names.
-  const acList = body.querySelector('#pqac');
-  let acTimer = null;
-  input.addEventListener('input', () => {
-    const term = input.value.trim();
-    clearTimeout(acTimer);
-    if (term.length < 2) { acList.innerHTML = ''; return; }
-    acTimer = setTimeout(async () => {
-      try {
-        const hits = await api.search(term);
-        acList.innerHTML = hits.map((p) => `<option value="${esc(p.name)}"></option>`).join('');
-      } catch { /* keep the last suggestions */ }
-    }, 160);
-  });
+  // The same suggestion list the site header uses — face, name, rank in colour —
+  // and picking one looks it up straight away rather than only filling the box.
+  attachPlayerSuggest(input, body.querySelector('#pqr'), () => look());
 
   if (q) look();
 
@@ -602,6 +647,7 @@ function playerCard(p, can) {
           }
         </div>
 
+        ${can.punishPlayers ? reachBlock() : ''}
         ${(can.punishPlayers || can.banPlayers) ? punishBlock(p, can) : ''}
         ${can.manageRanks ? rankBlock(p) : ''}
 
@@ -664,6 +710,28 @@ const DURATIONS = [
   { label: '7 days', ms: 7 * 86400000 },
   { label: '30 days', ms: 30 * 86400000 },
 ];
+
+// Talking to somebody, or moving them, without punishing them — the two things a
+// moderator wants far more often than a ban. Both find the player on whichever
+// server they are on, so neither asks you to know where they are.
+function reachBlock() {
+  return `
+    <div class="block" id="reachblock">
+      <div class="block-label">Reach them</div>
+      <p class="rule-text">Only lands while they are online. It finds them on whichever server they are playing.</p>
+      <div class="factions">
+        <input class="fld fld-inline" id="pmsg" placeholder="A message only they see" maxlength="512">
+        <button class="btn" id="pmsgdo">Send message</button>
+        <span class="fmsg" id="pmsgm"></span>
+      </div>
+      <div class="factions">
+        <input class="fld fld-inline" id="psrv" list="srvpool" placeholder="Move them to a server" maxlength="64">
+        <datalist id="srvpool"></datalist>
+        <button class="btn" id="psrvdo">Move</button>
+        <span class="fmsg" id="psrvm"></span>
+      </div>
+    </div>`;
+}
 
 function punishBlock(p, can) {
   return `
@@ -748,8 +816,52 @@ function wirePlayerCard(body, card, p, can) {
     });
   }
 
+  wireReach(card, p);
   wirePunish(card, p, refresh);
   wireRank(card, p, refresh);
+}
+
+async function wireReach(card, p) {
+  const mbtn = card.querySelector('#pmsgdo');
+  if (!mbtn) return;
+
+  const mi = card.querySelector('#pmsg');
+  const mm = card.querySelector('#pmsgm');
+  mbtn.addEventListener('click', async () => {
+    const text = mi.value.trim();
+    if (!text) { mm.className = 'fmsg bad'; mm.textContent = 'Type a message first.'; return; }
+    mbtn.disabled = true; mm.className = 'fmsg'; mm.textContent = 'Sending…';
+    try {
+      await api.dash.playerMessage(p.name, text);
+      mm.className = 'fmsg ok';
+      mm.textContent = 'Sent — they have it if they are online.';
+      mi.value = '';
+    } catch (err) { mm.className = 'fmsg bad'; mm.textContent = punishErr(err); }
+    finally { mbtn.disabled = false; }
+  });
+
+  const sbtn = card.querySelector('#psrvdo');
+  const si = card.querySelector('#psrv');
+  const sm = card.querySelector('#psrvm');
+  sbtn.addEventListener('click', async () => {
+    const server = si.value.trim();
+    if (!server) { sm.className = 'fmsg bad'; sm.textContent = 'Which server?'; return; }
+    sbtn.disabled = true; sm.className = 'fmsg'; sm.textContent = 'Moving…';
+    try {
+      await api.dash.playerSend(p.name, server);
+      sm.className = 'fmsg ok';
+      sm.textContent = `Sent to ${server} — if they are online.`;
+    } catch (err) { sm.className = 'fmsg bad'; sm.textContent = punishErr(err); }
+    finally { sbtn.disabled = false; }
+  });
+
+  // Offer the servers that are actually answering, rather than making somebody
+  // remember what this network calls its lobby.
+  try {
+    const { servers } = await api.dash.servers();
+    const pool = card.querySelector('#srvpool');
+    if (pool) pool.innerHTML = (servers || []).filter((s) => s.up).map((s) => `<option value="${esc(s.name)}"></option>`).join('');
+  } catch { /* free text still works */ }
 }
 
 // The website only queues a job; the game does the work a moment later. So these
@@ -785,6 +897,11 @@ const PUNISH_ERR = {
   target_not_linked: 'They have not linked their Discord. They must /link in game first — a promotion here changes a Discord role, and there is none to change until they do.',
   bot_missing: 'The Discord bot has not been deployed with rank sync yet.',
   grant_failed: 'The server errored while asking the bot. Nothing changed — try again.',
+  // reaching a player
+  message_required: 'Type a message first.',
+  bad_server: 'That is not a server name.',
+  message_failed: 'The server errored while sending it.',
+  send_failed: 'The server errored while moving them.',
 };
 
 function punishErr(err) {
