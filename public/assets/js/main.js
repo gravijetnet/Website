@@ -34,6 +34,11 @@ const MOVED = {
   '/link': '/dashboard/account',
 };
 
+// The console's config editors moved under one Network hub rather than sitting
+// as eleven entries in the tab strip. Their old addresses still resolve, so a
+// bookmark or a link somebody sent last week lands where the page went.
+const STAFF_MOVED = new Set(['ranks', 'ladders', 'reportmenu', 'filters', 'tags', 'broadcast', 'backups']);
+
 const app = document.getElementById('app');
 
 // --------------------------------------------------------------- sound
@@ -162,6 +167,11 @@ async function route(path, params) {
     return void navigate(`/dashboard${path}`, { replace: true });
   }
 
+  if (IS_DASH_HOST) {
+    const first = path.split('/').filter(Boolean)[0];
+    if (STAFF_MOVED.has(first)) return void navigate(`/network/${first}`, { replace: true });
+  }
+
   const surface = surfaceFor(path);
   // A fresh chrome has a fresh #who and a fresh pill, so both are repainted.
   if (mountShell(surface)) {
@@ -177,7 +187,7 @@ async function route(path, params) {
     // of the public home page, and every path under it is a console tab.
     if (surface === 'staff') {
       setTitle('Spielplatz');
-      return await renderStaffDash(app, seg[0] || '');
+      return await renderStaffDash(app, seg[0] || '', seg[1] || '');
     }
     if (seg[0] === 'dashboard') {
       setTitle('Your dashboard');

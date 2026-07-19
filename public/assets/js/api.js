@@ -124,6 +124,16 @@ export const api = {
     categories: () => get('/dash/config/categories'),
     saveCategory: (body) => send('/dash/config/category', 'POST', body),
 
+    // The chat filter and the cosmetic tags (routes/admin).
+    configFilters: () => get('/dash/config/filters'),
+    saveFilter: (body) => send('/dash/config/filter', 'POST', body),
+    configTags: () => get('/dash/config/tags'),
+    saveTag: (body) => send('/dash/config/tag', 'POST', body),
+
+    // What the core recorded — commands run, lines said (routes/admin).
+    commandLogs: (q, limit) => get(`/dash/logs/commands?q=${encodeURIComponent(q || '')}&limit=${limit || 100}`),
+    chatLogs: (q, limit) => get(`/dash/logs/chat?q=${encodeURIComponent(q || '')}&limit=${limit || 100}`),
+
     // Announcements to the game (routes/moderation).
     broadcast: (kind, message) => send('/dash/broadcast', 'POST', { kind, message }),
     broadcasts: () => get('/dash/broadcasts'),

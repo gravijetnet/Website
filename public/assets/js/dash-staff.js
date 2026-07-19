@@ -14,13 +14,16 @@
 import { api } from './api.js';
 import { icons } from './icons.js';
 import { pageLoader, notice } from './components.js';
-import { paintStaffTabs, STAFF_TABS } from './shell.js';
+import { paintStaffTabs, STAFF_TABS, NETWORK_PAGES, tabAllowed } from './shell.js';
 import { esc, head, int, timeAgo, dateShort, playtime, dur } from './util.js';
 import { renderRulesEditor } from './dash-rules.js';
 import { renderAccess } from './dash-access.js';
-import { renderRanks, renderLadders, renderReportMenu, renderBackups } from './dash-network.js';
+import {
+  renderRanks, renderLadders, renderReportMenu, renderBackups, renderFilters, renderTags,
+} from './dash-network.js';
 import { renderUsers } from './dash-users.js';
 import { renderBroadcast } from './dash-broadcast.js';
+import { renderLogs } from './dash-logs.js';
 
 const SITE = 'https://example.invalid';
 
@@ -37,7 +40,7 @@ function wall(title, body) {
     </div>`;
 }
 
-export async function renderStaffDash(root, tab) {
+export async function renderStaffDash(root, tab, sub) {
   root.innerHTML = pageLoader();
   const me = await api.me().catch(() => ({ user: null }));
   if (!me.user) return void (root.innerHTML = wall('Staff only', 'Sign in with the Discord account that holds your rank.'));
@@ -52,7 +55,7 @@ export async function renderStaffDash(root, tab) {
   const can = me.user.can || {};
   paintStaffTabs(can);
 
-  const allowed = STAFF_TABS.filter((t) => can[t.need]);
+  const allowed = STAFF_TABS.filter((t) => tabAllowed(t, can));
   const active = allowed.find((t) => t.key === tab);
   if (!active) {
     root.innerHTML = notice(
@@ -72,12 +75,9 @@ export async function renderStaffDash(root, tab) {
     else if (active.key === 'appeals') await paintAppeals(body, can);
     else if (active.key === 'players') await paintPlayers(body, can);
     else if (active.key === 'users') await renderUsers(body, can);
-    else if (active.key === 'broadcast') await renderBroadcast(body, can);
+    else if (active.key === 'logs') await renderLogs(body, can);
     else if (active.key === 'rules') await renderRulesEditor(body, can);
-    else if (active.key === 'ranks') await renderRanks(body, can);
-    else if (active.key === 'ladders') await renderLadders(body, can);
-    else if (active.key === 'reportmenu') await renderReportMenu(body, can);
-    else if (active.key === 'backups') await renderBackups(body, can);
+    else if (active.key === 'network') await paintNetwork(body, can, sub);
     else if (active.key === 'access') await renderAccess(body, can);
     else if (active.key === 'audit') await paintAudit(body);
   } catch (err) {
@@ -86,6 +86,37 @@ export async function renderStaffDash(root, tab) {
       err?.body?.error === 'forbidden' ? 'Your rank does not cover this.' : 'That list could not be loaded.',
     )}</div>`;
   }
+}
+
+// --- the network hub -------------------------------------------------------
+//
+// One destination in the strip, then a row of pages inside it. Each page is its
+// own editor module; this only decides which you are looking at. Every page is a
+// real URL (/network/tags), so a link to one is a link somebody can send.
+async function paintNetwork(body, can, sub) {
+  const pages = NETWORK_PAGES.filter((p) => can[p.need]);
+  if (!pages.length) {
+    body.innerHTML = notice('Nothing to change', 'Your rank has no network permissions.');
+    return;
+  }
+  const page = pages.find((p) => p.key === sub) || pages[0];
+
+  body.innerHTML = `
+    <nav class="subtabs">
+      ${pages
+        .map((p) => `<a class="subtab ${p.key === page.key ? 'active' : ''}" href="/network/${p.key}">${esc(p.label)}</a>`)
+        .join('')}
+    </nav>
+    <div id="npage">${pageLoader()}</div>`;
+
+  const npage = body.querySelector('#npage');
+  if (page.key === 'ranks') await renderRanks(npage, can);
+  else if (page.key === 'ladders') await renderLadders(npage, can);
+  else if (page.key === 'reportmenu') await renderReportMenu(npage, can);
+  else if (page.key === 'filters') await renderFilters(npage, can);
+  else if (page.key === 'tags') await renderTags(npage, can);
+  else if (page.key === 'broadcast') await renderBroadcast(npage, can);
+  else if (page.key === 'backups') await renderBackups(npage, can);
 }
 
 function empty(what) {

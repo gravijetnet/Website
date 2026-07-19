@@ -724,3 +724,250 @@ function wireBackups(root) {
     });
   });
 }
+
+// ======================================================== chat filters ======
+
+// What the core matches every line of chat against. Edited in the store like the
+// report menu, and picked up on each server's next restart. A REGEX pattern is
+// compiled server-side before it saves — a broken pattern would otherwise be a
+// broken chat filter found by the whole server at once.
+
+export async function renderFilters(root) {
+  root.innerHTML = pageLoader();
+  let data;
+  try {
+    data = await api.dash.configFilters();
+  } catch {
+    root.innerHTML = notice('Chat filters unavailable', 'Could not read the filters from the core.');
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="section-head">
+      <div>
+        <h2>Chat filters</h2>
+        <p>What every line of chat is matched against. A change applies on each server’s next restart. Patterns are checked before they save, so a broken one is caught here and not in chat.</p>
+      </div>
+    </div>
+    <details class="rank-ed rank-new">
+      <summary><span class="re-name">＋ New filter</span></summary>
+      <div class="re-body" id="newfilter">
+        <label class="re-field"><span class="re-lab">Name</span><input class="fld" data-fname placeholder="Slurs" maxlength="64"></label>
+        ${filterFields(null, data)}
+        <div class="factions"><button class="btn btn-primary" data-fcreate>Create filter</button><span class="fmsg" data-msg></span></div>
+      </div>
+    </details>
+    <div id="filterlist">${data.filters.map((f) => filterCard(f, data)).join('') || '<div class="empty">No filters yet.</div>'}</div>
+    <datalist id="fladpool">${data.ladders.map((l) => `<option value="${esc(l)}">`).join('')}</datalist>`;
+
+  wireFilters(root);
+}
+
+function filterFields(f, data) {
+  return `
+    <label class="re-field">
+      <span class="re-lab">Pattern</span>
+      <textarea class="fld mono" data-fpattern rows="3" placeholder="badword">${esc(f ? f.filter : '')}</textarea>
+    </label>
+    <div class="re-grid">
+      <label class="re-field"><span class="re-lab">Match as</span>
+        <select class="fld" data-ftype>
+          ${data.types.map((t) => `<option value="${t}" ${f && f.filterType === t ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </label>
+      <label class="re-field"><span class="re-lab">Ladder to punish on</span>
+        <input class="fld" list="fladpool" data-fladder value="${esc(f ? f.punishmentLadderId : '')}" placeholder="(optional)" maxlength="64">
+      </label>
+    </div>
+    <div class="re-flags">
+      <label class="re-flag" title="Block the message outright rather than only flagging it"><input type="checkbox" data-fhard ${f && f.hard ? 'checked' : ''}> Hard block</label>
+      <label class="re-flag" title="Punish automatically, stepping the ladder above"><input type="checkbox" data-fauto ${f && f.autoPunish ? 'checked' : ''}> Auto-punish</label>
+    </div>`;
+}
+
+function filterCard(f, data) {
+  return `
+    <details class="rank-ed" data-filter="${esc(f.id)}">
+      <summary>
+        <span class="re-name">${esc(f.id)}</span>
+        <span class="re-tag">${esc(f.filterType)}</span>
+        ${f.hard ? '<span class="re-tag">hard</span>' : ''}
+        ${f.autoPunish ? `<span class="re-tag">auto → ${esc(f.punishmentLadderId || 'no ladder')}</span>` : ''}
+        <span class="re-prio">${f.filter.length} characters</span>
+      </summary>
+      <div class="re-body">
+        ${filterFields(f, data)}
+        <div class="factions">
+          <button class="btn btn-primary" data-fsave>Save</button>
+          <button class="btn btn-danger" data-fdel>Delete</button>
+          <span class="fmsg" data-msg></span>
+        </div>
+      </div>
+    </details>`;
+}
+
+function readFilter(box) {
+  return {
+    filter: box.querySelector('[data-fpattern]').value,
+    filterType: box.querySelector('[data-ftype]').value,
+    punishmentLadderId: box.querySelector('[data-fladder]').value,
+    hard: box.querySelector('[data-fhard]').checked,
+    autoPunish: box.querySelector('[data-fauto]').checked,
+  };
+}
+
+function wireFilters(root) {
+  root.querySelectorAll('#filterlist .rank-ed').forEach((card) => {
+    const name = card.dataset.filter;
+    const msg = card.querySelector('[data-msg]');
+    card.querySelector('[data-fsave]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Saving…';
+      try {
+        await api.dash.saveFilter({ op: 'update', name, ...readFilter(card) });
+        msg.className = 'fmsg ok'; msg.textContent = 'Saved. Applies on each server’s next restart.';
+      } catch (err) { msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+      finally { btn.disabled = false; }
+    });
+    card.querySelector('[data-fdel]').addEventListener('click', async (e) => {
+      if (!confirm(`Delete the filter "${name}"? Chat stops being matched against it.`)) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try { await api.dash.saveFilter({ op: 'delete', name }); card.remove(); }
+      catch (err) { btn.disabled = false; msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+    });
+  });
+
+  const nf = root.querySelector('#newfilter');
+  const cmsg = nf.querySelector('[data-msg]');
+  nf.querySelector('[data-fcreate]').addEventListener('click', async (e) => {
+    const name = nf.querySelector('[data-fname]').value.trim();
+    if (!name) { cmsg.className = 'fmsg bad'; cmsg.textContent = 'Give it a name.'; return; }
+    const btn = e.currentTarget;
+    btn.disabled = true; cmsg.className = 'fmsg'; cmsg.textContent = 'Creating…';
+    try {
+      await api.dash.saveFilter({ op: 'create', name, ...readFilter(nf) });
+      setTimeout(() => renderFilters(root), 700);
+    } catch (err) { btn.disabled = false; cmsg.className = 'fmsg bad'; cmsg.textContent = cfgErr(err); }
+  });
+}
+
+// ============================================================== tags ========
+
+// The cosmetic tags players buy and wear. Keyed by id rather than name, so a
+// rename is just a rename.
+
+export async function renderTags(root) {
+  root.innerHTML = pageLoader();
+  let data;
+  try {
+    data = await api.dash.configTags();
+  } catch {
+    root.innerHTML = notice('Tags unavailable', 'Could not read the tags from the core.');
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="section-head">
+      <div>
+        <h2>Tags</h2>
+        <p>The cosmetic tags players wear. Prefix is what shows in chat — colour codes with &amp; work, and the preview is what they will see.</p>
+      </div>
+    </div>
+    <details class="rank-ed rank-new">
+      <summary><span class="re-name">＋ New tag</span></summary>
+      <div class="re-body" id="newtag">
+        ${tagFields(null)}
+        <div class="factions"><button class="btn btn-primary" data-tcreate>Create tag</button><span class="fmsg" data-msg></span></div>
+      </div>
+    </details>
+    <div id="taglist">${data.tags.map(tagCard).join('') || '<div class="empty">No tags yet.</div>'}</div>`;
+
+  wireTags(root);
+}
+
+function tagFields(t) {
+  return `
+    <div class="re-grid">
+      <label class="re-field"><span class="re-lab">Name</span><input class="fld" data-tname value="${esc(t ? t.name : '')}" placeholder="Austria" maxlength="48"></label>
+      <label class="re-field"><span class="re-lab">Colour</span><input class="fld" data-tcolor value="${esc(t ? t.color : '')}" placeholder="&c" maxlength="16"></label>
+      <label class="re-field"><span class="re-lab">Priority</span><input class="fld" type="number" data-tprio value="${t ? t.priority : 0}"></label>
+      <label class="re-field"><span class="re-lab">Price</span><input class="fld" type="number" data-tprice value="${t ? t.price : 0}"></label>
+    </div>
+    <label class="re-field"><span class="re-lab">Prefix</span><input class="fld" data-tprefix value="${esc(t ? t.prefix : '')}" placeholder="&c&lAU&f&lSTR&c&lIA" maxlength="96"></label>
+    <div class="re-flags">
+      <label class="re-flag"><input type="checkbox" data-tbuy ${t && t.purchasable ? 'checked' : ''}> Purchasable</label>
+    </div>`;
+}
+
+function tagCard(t) {
+  return `
+    <details class="rank-ed" data-tag="${esc(t.id)}">
+      <summary>
+        <span class="re-swatch">${mcPreview(t.prefix || t.name)}</span>
+        <span class="re-name">${esc(t.name)}</span>
+        ${t.purchasable ? `<span class="re-tag">${t.price}</span>` : '<span class="re-tag muted">not for sale</span>'}
+        <span class="re-prio">priority ${t.priority}</span>
+      </summary>
+      <div class="re-body">
+        ${tagFields(t)}
+        <div class="factions">
+          <button class="btn btn-primary" data-tsave>Save</button>
+          <button class="btn btn-danger" data-tdel>Delete</button>
+          <span class="fmsg" data-msg></span>
+        </div>
+      </div>
+    </details>`;
+}
+
+function readTagForm(box) {
+  return {
+    name: box.querySelector('[data-tname]').value,
+    prefix: box.querySelector('[data-tprefix]').value,
+    color: box.querySelector('[data-tcolor]').value,
+    priority: Number(box.querySelector('[data-tprio]').value),
+    price: Number(box.querySelector('[data-tprice]').value),
+    purchasable: box.querySelector('[data-tbuy]').checked,
+  };
+}
+
+function wireTags(root) {
+  // Live prefix preview wherever a tag is edited.
+  root.querySelectorAll('.rank-ed').forEach((card) => {
+    const pre = card.querySelector('[data-tprefix]');
+    const sw = card.querySelector('.re-swatch');
+    if (pre && sw) pre.addEventListener('input', () => (sw.innerHTML = mcPreview(pre.value)));
+  });
+
+  root.querySelectorAll('#taglist .rank-ed').forEach((card) => {
+    const id = card.dataset.tag;
+    const msg = card.querySelector('[data-msg]');
+    card.querySelector('[data-tsave]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Saving…';
+      try {
+        await api.dash.saveTag({ op: 'update', id, ...readTagForm(card) });
+        msg.className = 'fmsg ok'; msg.textContent = 'Saved.';
+      } catch (err) { msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+      finally { btn.disabled = false; }
+    });
+    card.querySelector('[data-tdel]').addEventListener('click', async (e) => {
+      if (!confirm('Delete this tag? Anyone wearing it loses it.')) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try { await api.dash.saveTag({ op: 'delete', id }); card.remove(); }
+      catch (err) { btn.disabled = false; msg.className = 'fmsg bad'; msg.textContent = cfgErr(err); }
+    });
+  });
+
+  const nt = root.querySelector('#newtag');
+  const cmsg = nt.querySelector('[data-msg]');
+  nt.querySelector('[data-tcreate]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; cmsg.className = 'fmsg'; cmsg.textContent = 'Creating…';
+    try {
+      await api.dash.saveTag({ op: 'create', ...readTagForm(nt) });
+      setTimeout(() => renderTags(root), 700);
+    } catch (err) { btn.disabled = false; cmsg.className = 'fmsg bad'; cmsg.textContent = cfgErr(err); }
+  });
+}

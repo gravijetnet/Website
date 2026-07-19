@@ -1103,3 +1103,29 @@ a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
   min-height: 30px; padding: 8px 10px; margin: 8px 0;
   border: 2px solid var(--slot-lo); background: #000; font-size: 16px;
 }
+
+/* ------------------------------------------------ the network hub's pages */
+/* A second order of navigation, quieter than the strip above it: by the time you
+   are reading this row you have already chosen where you are, and it only has to
+   say which part of it you are changing. */
+.subtabs {
+  display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 18px;
+  padding-bottom: 8px; border-bottom: 2px solid var(--slot-lo);
+}
+.subtab {
+  font-size: 16px; padding: 6px 10px; color: var(--mc-gray);
+  text-shadow: 2px 2px 0 #2a2a2a; border: 2px solid transparent;
+}
+.subtab:hover { color: var(--mc-yellow); text-shadow: 2px 2px 0 #3f3f15; }
+.subtab.active {
+  color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f;
+  border-color: var(--slot-lo); background: #0d0d0d;
+}
+
+/* A regex or a command is read character by character, so it gets a real mono
+   face — the pixel font is for prose, not for `\b(a|b)\1{3,}`. */
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 15px; }
+textarea.fld.mono { line-height: 1.45; }
+
+.logbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.logbar .lb-tabs { flex-shrink: 0; }

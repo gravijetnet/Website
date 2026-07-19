@@ -47,6 +47,12 @@ const phoenix = {
   reports: () => collection(config.mongo.phoenixDb, 'px-reports'),
   reportCategories: () => collection(config.mongo.phoenixDb, 'px-report-categories'),
   punishmentLadders: () => collection(config.mongo.phoenixDb, 'px-punishmentLadders'),
+  // The chat filter word list, the cosmetic tags, and the two logs the core
+  // keeps: every command run and every line said.
+  filters: () => collection(config.mongo.phoenixDb, 'px-filters'),
+  tags: () => collection(config.mongo.phoenixDb, 'tags'),
+  commandLogs: () => collection(config.mongo.phoenixDb, 'commandLogs'),
+  chatLogs: () => collection(config.mongo.phoenixDb, 'px-chatLogs'),
 };
 
 // Ours to write.

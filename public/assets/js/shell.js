@@ -78,15 +78,33 @@ export const STAFF_TABS = [
   { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
   { key: 'players', label: 'Players', need: 'viewPlayers' },
   { key: 'users', label: 'Users', need: 'viewPlayers' },
-  { key: 'broadcast', label: 'Broadcast', need: 'broadcast' },
+  { key: 'logs', label: 'Logs', need: 'viewReports' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
-  { key: 'ranks', label: 'Ranks', need: 'manageNetwork' },
-  { key: 'ladders', label: 'Ladders', need: 'manageNetwork' },
-  { key: 'reportmenu', label: 'Report menu', need: 'manageNetwork' },
-  { key: 'backups', label: 'Backups', need: 'manageNetwork' },
+  // A hub, not a page — see NETWORK_PAGES. Shown to anybody who can reach at
+  // least one thing inside it.
+  { key: 'network', label: 'Network', anyOf: ['manageNetwork', 'broadcast'] },
   { key: 'access', label: 'Access', need: 'manageAccess' },
   { key: 'audit', label: 'Audit', need: 'viewReports' },
 ];
+
+// Everything that edits the network's own configuration lives under the Network
+// tab. As tabs these were eleven entries in a strip nobody could scan; as one
+// destination with its own row of pages they are a place you go, and then choose
+// what you are changing.
+export const NETWORK_PAGES = [
+  { key: 'ranks', label: 'Ranks', need: 'manageNetwork' },
+  { key: 'ladders', label: 'Ladders', need: 'manageNetwork' },
+  { key: 'reportmenu', label: 'Report menu', need: 'manageNetwork' },
+  { key: 'filters', label: 'Chat filters', need: 'manageNetwork' },
+  { key: 'tags', label: 'Tags', need: 'manageNetwork' },
+  { key: 'broadcast', label: 'Broadcast', need: 'broadcast' },
+  { key: 'backups', label: 'Backups', need: 'manageNetwork' },
+];
+
+/** Whether a tab is reachable — a hub needs any one of its pages, a page its own. */
+export function tabAllowed(tab, can) {
+  return tab.anyOf ? tab.anyOf.some((n) => can[n]) : !!can[tab.need];
+}
 
 let current = null;
 
@@ -240,7 +258,7 @@ function staffChrome() {
 export function paintStaffTabs(can = {}) {
   const box = document.getElementById('stabs');
   if (!box) return;
-  box.innerHTML = STAFF_TABS.filter((t) => can[t.need])
+  box.innerHTML = STAFF_TABS.filter((t) => tabAllowed(t, can))
     .map((t) => `<a href="/${t.key}" data-match="/${t.key}">${esc(t.label)}</a>`)
     .join('');
   markActive(location.pathname);

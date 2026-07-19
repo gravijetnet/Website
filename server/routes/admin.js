@@ -12,6 +12,7 @@ const configActions = require('../lib/config-actions');
 const backups = require('../lib/backups');
 const links = require('../lib/links');
 const sql = require('../lib/sql');
+const { ObjectId } = require('mongodb');
 
 // The things Admin and above can change about the network itself, rather than
 // about one player: the rulebook, and who is allowed to do what.
@@ -828,6 +829,255 @@ router.post('/dash/backups/:id/restore', staff.requires('manageNetwork'), json, 
     if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
     console.error('[dash backup restore]', err);
     res.status(500).json({ error: 'restore_failed' });
+  }
+});
+
+// --- the chat filter -------------------------------------------------------
+//
+// The word list the core matches every line against. Same story as the report
+// menu: no API, so edited in the store directly and picked up on restart. A
+// REGEX filter is compiled here before it is saved — a pattern that does not
+// parse would otherwise be a broken chat filter discovered by the whole server.
+
+const FILTER_TYPES = ['WORD', 'REGEX', 'CONTAINS'];
+
+router.get('/dash/config/filters', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    const [filters, ladders] = await Promise.all([
+      (await mongo.phoenix.filters()).find({}).toArray(),
+      (await mongo.phoenix.punishmentLadders()).find({}, { projection: { _id: 1 } }).toArray(),
+    ]);
+    res.json({
+      filters: filters
+        .map((f) => ({
+          id: f._id,
+          filter: f.filter || '',
+          filterType: String(f.filterType || 'WORD').toUpperCase(),
+          hard: !!f.hard,
+          autoPunish: !!f.autoPunish,
+          punishmentLadderId: f.punishmentLadderId || '',
+        }))
+        .sort((a, b) => String(a.id).localeCompare(String(b.id))),
+      types: FILTER_TYPES,
+      ladders: ladders.map((l) => l._id).sort(),
+    });
+  } catch (err) {
+    console.error('[dash filters]', err);
+    res.status(500).json({ error: 'filters_unavailable' });
+  }
+});
+
+router.post('/dash/config/filter', staff.requires('manageNetwork'), json, async (req, res) => {
+  const op = String(req.body?.op || '');
+  if (!['create', 'update', 'delete'].includes(op)) return res.status(400).json({ error: 'bad_op' });
+  const name = oneLine(req.body?.name, 64);
+  if (!name || !CAT_NAME.test(name)) return res.status(400).json({ error: 'bad_name' });
+
+  try {
+    const col = await mongo.phoenix.filters();
+    const existing = await col.findOne({ _id: name });
+
+    if (op === 'delete') {
+      if (!existing) return res.status(404).json({ error: 'unknown_filter' });
+      await col.deleteOne({ _id: name });
+      await audit.record(req, 'filter.delete', name);
+      return res.json({ ok: true });
+    }
+    if (op === 'create' && existing) return res.status(409).json({ error: 'filter_exists' });
+    if (op === 'update' && !existing) return res.status(404).json({ error: 'unknown_filter' });
+
+    const pattern = String(req.body?.filter ?? '').replace(/[\r\n]+/g, '').trim().slice(0, 4000);
+    if (!pattern) return res.status(400).json({ error: 'pattern_required' });
+    const filterType = oneLine(req.body?.filterType, 16).toUpperCase();
+    if (!FILTER_TYPES.includes(filterType)) return res.status(400).json({ error: 'bad_filter_type' });
+    // A regex that does not compile here would not compile in game either.
+    if (filterType === 'REGEX') {
+      try { new RegExp(pattern); } catch (e) { return res.status(400).json({ error: 'bad_regex', detail: e.message }); }
+    }
+    const ladderId = oneLine(req.body?.punishmentLadderId, 64);
+    if (ladderId && !(await (await mongo.phoenix.punishmentLadders()).findOne({ _id: ladderId }))) {
+      return res.status(400).json({ error: 'unknown_ladder' });
+    }
+
+    await col.replaceOne(
+      { _id: name },
+      {
+        _id: name,
+        filter: pattern,
+        filterType,
+        hard: req.body?.hard === true || req.body?.hard === 'true',
+        autoPunish: req.body?.autoPunish === true || req.body?.autoPunish === 'true',
+        punishmentLadderId: ladderId || null,
+      },
+      { upsert: true },
+    );
+    await audit.record(req, `filter.${op}`, name, { filterType, hard: !!req.body?.hard });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[dash filter]', err);
+    res.status(500).json({ error: 'filter_failed' });
+  }
+});
+
+// --- cosmetic tags ---------------------------------------------------------
+// Keyed by ObjectId rather than by name, so these are addressed by their id.
+
+router.get('/dash/config/tags', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    const tags = await (await mongo.phoenix.tags()).find({}).toArray();
+    res.json({
+      tags: tags
+        .map((t) => ({
+          id: String(t._id),
+          name: t.name || '',
+          prefix: t.prefix || '',
+          color: t.color || '',
+          priority: Number(t.priority) || 0,
+          price: Number(t.price) || 0,
+          purchasable: !!t.purchasable,
+        }))
+        .sort((a, b) => b.priority - a.priority || String(a.name).localeCompare(String(b.name))),
+    });
+  } catch (err) {
+    console.error('[dash tags]', err);
+    res.status(500).json({ error: 'tags_unavailable' });
+  }
+});
+
+router.post('/dash/config/tag', staff.requires('manageNetwork'), json, async (req, res) => {
+  const op = String(req.body?.op || '');
+  if (!['create', 'update', 'delete'].includes(op)) return res.status(400).json({ error: 'bad_op' });
+
+  try {
+    const col = await mongo.phoenix.tags();
+
+    if (op !== 'create') {
+      let oid;
+      try { oid = new ObjectId(String(req.body?.id || '')); }
+      catch { return res.status(400).json({ error: 'bad_tag_id' }); }
+      if (op === 'delete') {
+        const r = await col.deleteOne({ _id: oid });
+        if (!r.deletedCount) return res.status(404).json({ error: 'unknown_tag' });
+        await audit.record(req, 'tag.delete', String(oid));
+        return res.json({ ok: true });
+      }
+      const fields = readTag(req.body);
+      if (fields.error) return res.status(400).json({ error: fields.error });
+      const r = await col.updateOne({ _id: oid }, { $set: fields.doc });
+      if (!r.matchedCount) return res.status(404).json({ error: 'unknown_tag' });
+      await audit.record(req, 'tag.update', String(oid), { name: fields.doc.name });
+      return res.json({ ok: true });
+    }
+
+    const fields = readTag(req.body);
+    if (fields.error) return res.status(400).json({ error: fields.error });
+    const r = await col.insertOne(fields.doc);
+    await audit.record(req, 'tag.create', String(r.insertedId), { name: fields.doc.name });
+    res.json({ ok: true, id: String(r.insertedId) });
+  } catch (err) {
+    console.error('[dash tag]', err);
+    res.status(500).json({ error: 'tag_failed' });
+  }
+});
+
+function readTag(body) {
+  const name = oneLine(body?.name, 48);
+  if (!name) return { error: 'name_required' };
+  const priority = Math.trunc(Number(body?.priority));
+  const price = Math.trunc(Number(body?.price));
+  if (!Number.isFinite(priority) || !Number.isFinite(price)) return { error: 'bad_value' };
+  return {
+    doc: {
+      name,
+      prefix: oneLine(body?.prefix, 96),
+      color: oneLine(body?.color, 16),
+      priority,
+      price,
+      purchasable: body?.purchasable === true || body?.purchasable === 'true',
+    },
+  };
+}
+
+// --- the logs the core keeps ------------------------------------------------
+//
+// Every command run and every line said, which is what actually answers "what
+// happened" when a report says somebody was abusive or an admin says they did
+// not run that. Read-only, and searchable by the player as well as by the text —
+// a moderator looking somebody up should not have to know their UUID.
+
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+async function namesFor(uuids) {
+  const list = [...new Set(uuids.filter(Boolean))];
+  if (!list.length) return new Map();
+  const docs = await (await mongo.phoenix.profiles())
+    .find({ _id: { $in: list } }, { projection: { name: 1 } })
+    .toArray();
+  return new Map(docs.map((d) => [d._id, d.name]));
+}
+
+// Turns a search term into "this text, or anything this player did".
+async function actorFilter(q, textField, actorField) {
+  if (!q) return {};
+  const rx = new RegExp(escapeRegex(q), 'i');
+  const profs = await (await mongo.phoenix.profiles())
+    .find({ name: rx }, { projection: { _id: 1 } })
+    .limit(50)
+    .toArray();
+  const uuids = profs.map((p) => p._id);
+  const clauses = [{ [textField]: rx }];
+  if (uuids.length) clauses.push({ [actorField]: { $in: uuids } });
+  return { $or: clauses };
+}
+
+router.get('/dash/logs/commands', staff.requires('viewReports'), async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 64);
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
+    const rows = await (await mongo.phoenix.commandLogs())
+      .find(await actorFilter(q, 'command', 'issuedBy'))
+      .sort({ issuedOn: -1 })
+      .limit(limit)
+      .toArray();
+    const names = await namesFor(rows.map((r) => r.issuedBy));
+    res.json({
+      logs: rows.map((r) => ({
+        id: String(r._id),
+        by: names.get(r.issuedBy) || null,
+        byUuid: r.issuedBy,
+        command: r.command,
+        server: r.server,
+        at: Number(r.issuedOn) || 0,
+      })),
+    });
+  } catch (err) {
+    console.error('[dash command logs]', err);
+    res.status(500).json({ error: 'logs_unavailable' });
+  }
+});
+
+router.get('/dash/logs/chat', staff.requires('viewReports'), async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 64);
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
+    const rows = await (await mongo.phoenix.chatLogs())
+      .find(await actorFilter(q, 'message', 'sender'))
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .toArray();
+    const names = await namesFor(rows.map((r) => r.sender));
+    res.json({
+      logs: rows.map((r) => ({
+        id: String(r._id),
+        by: names.get(r.sender) || null,
+        byUuid: r.sender,
+        message: r.message,
+        at: Number(r.timestamp) || 0,
+      })),
+    });
+  } catch (err) {
+    console.error('[dash chat logs]', err);
+    res.status(500).json({ error: 'logs_unavailable' });
   }
 });
 
