@@ -261,6 +261,75 @@ router.get('/dash/panel/servers/:id/activities', staff.requires('manageNetwork')
   }
 });
 
+// --- the files on the box ----------------------------------------------------
+//
+// Reading a config is how you find out why a server is behaving oddly; editing
+// one is how you fix it without an SFTP client. Reading is Admin, writing is
+// Management — a typo in server.properties is a server that will not start.
+
+// Text this console will open in its editor. Everything else is listed and left
+// alone: nobody wants a world file rendered as mojibake in a textarea.
+const EDITABLE = /\.(properties|ya?ml|json|txt|conf|cfg|ini|toml|log|md|sh)$/i;
+const MAX_EDIT_BYTES = 512 * 1024;
+
+router.get('/dash/panel/servers/:id/files', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    await assertManaged(req.params.id);
+    const dir = String(req.query.path || '/');
+    const d = await feather.files(req.params.id, dir);
+    const contents = d?.contents || [];
+    res.json({
+      path: dir,
+      limited: !!d?.limited,
+      entries: contents
+        .map((e) => ({
+          name: e.name,
+          directory: !!e.directory,
+          size: Number(e.size) || 0,
+          modified: e.modified || null,
+          editable: !e.directory && EDITABLE.test(e.name) && (Number(e.size) || 0) <= MAX_EDIT_BYTES,
+        }))
+        // Folders first, then names — the order a file manager has taught
+        // everybody to expect.
+        .sort((a, b) => (b.directory - a.directory) || a.name.localeCompare(b.name)),
+    });
+  } catch (err) {
+    return fail(res, err, 'files');
+  }
+});
+
+router.get('/dash/panel/servers/:id/file', staff.requires('manageNetwork'), async (req, res) => {
+  const path = String(req.query.path || '');
+  if (!path) return res.status(400).json({ error: 'path_required', detail: 'Which file?' });
+  if (!EDITABLE.test(path)) return res.status(400).json({ error: 'not_text', detail: 'That is not a file this console opens.' });
+  try {
+    await assertManaged(req.params.id);
+    const content = await feather.readFile(req.params.id, path);
+    if (String(content).length > MAX_EDIT_BYTES) {
+      return res.status(413).json({ error: 'too_big', detail: 'That file is too large to open here.' });
+    }
+    res.json({ path, content: String(content) });
+  } catch (err) {
+    return fail(res, err, 'file');
+  }
+});
+
+router.post('/dash/panel/servers/:id/file', staff.requires('runCommands'), express.text({ limit: '1mb', type: '*/*' }), async (req, res) => {
+  const path = String(req.query.path || '');
+  if (!path) return res.status(400).json({ error: 'path_required', detail: 'Which file?' });
+  if (!EDITABLE.test(path)) return res.status(400).json({ error: 'not_text', detail: 'That is not a file this console writes.' });
+  const content = typeof req.body === 'string' ? req.body : '';
+  if (content.length > MAX_EDIT_BYTES) return res.status(413).json({ error: 'too_big', detail: 'That is more than this console writes.' });
+  try {
+    const server = await assertManaged(req.params.id);
+    await feather.writeFile(req.params.id, path, content);
+    await audit.record(req, 'panel.write_file', server.name, { path, bytes: content.length });
+    res.json({ ok: true });
+  } catch (err) {
+    return fail(res, err, 'write file');
+  }
+});
+
 // --- acting -----------------------------------------------------------------
 
 // Power and the container console are the two things here that can take the

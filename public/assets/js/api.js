@@ -157,6 +157,23 @@ export const api = {
     panelShareLogs: (id) => send(`/dash/panel/servers/${encodeURIComponent(id)}/logs/share`, 'POST'),
     panelAllocations: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/allocations`),
     panelActivities: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/activities`),
+    panelFiles: (id, path) => get(`/dash/panel/servers/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path || '/')}`),
+    panelFile: (id, path) => get(`/dash/panel/servers/${encodeURIComponent(id)}/file?path=${encodeURIComponent(path)}`),
+    panelWriteFile: async (id, path, content) => {
+      // Raw body, not JSON: the panel takes the file as the file.
+      const res = await fetch(`/api/dash/panel/servers/${encodeURIComponent(id)}/file?path=${encodeURIComponent(path)}`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'text/plain' },
+        body: content,
+      });
+      if (!res.ok) {
+        const err = new Error(`write failed: ${res.status}`);
+        err.status = res.status;
+        try { err.body = await res.json(); } catch { /* ignore */ }
+        throw err;
+      }
+      return res.json();
+    },
     panelBackups: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/backups`),
     panelWorlds: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/worlds`),
     panelPlayers: (id) => get(`/dash/panel/servers/${encodeURIComponent(id)}/players`),

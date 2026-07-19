@@ -208,6 +208,11 @@ function serverCard(s, can) {
           <div data-slot>${pageLoader()}</div>
         </details>
 
+        <details class="block card-roll" data-lazy="files">
+          <summary class="card-sum"><span class="cs-name">Files</span><span class="cs-meta">open to load</span></summary>
+          <div data-slot>${pageLoader()}</div>
+        </details>
+
         <details class="block card-roll" data-lazy="activity">
           <summary class="card-sum"><span class="cs-name">What the panel recorded</span><span class="cs-meta">open to load</span></summary>
           <div data-slot>${pageLoader()}</div>
@@ -281,6 +286,53 @@ function activityPane(d) {
         <div class="dr">${a.at ? esc(dateShort(a.at)) : ''}</div>
       </div>`)
     .join('')}</div>`;
+}
+
+// A file listing, and — for the ones this console will open — an editor.
+// Folders first, then names: the order every file manager has taught people to
+// expect, and the one that makes a deep tree navigable by eye.
+function filesPane(d, canWrite) {
+  const up = d.path && d.path !== '/' ? d.path.replace(/\/[^/]*\/?$/, '') || '/' : null;
+  return `
+    <div class="filebar">
+      <span class="dr mono">${esc(d.path)}</span>
+      ${up !== null ? `<button class="btn ed-mini" data-cd="${esc(up)}">Up</button>` : ''}
+      ${d.limited ? '<span class="dr">(long directory, truncated)</span>' : ''}
+    </div>
+    <div class="board">
+      ${
+        d.entries.length
+          ? d.entries
+            .map((e) => `
+              <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+                <div style="min-width:0">
+                  <div class="dn mono">${e.directory ? '📁 ' : ''}${esc(e.name)}</div>
+                  <div class="dr">${e.directory ? 'folder' : bytes(e.size)}${e.modified ? ` · ${timeAgo(e.modified)}` : ''}</div>
+                </div>
+                <div class="urow-right">
+                  ${e.directory ? `<button class="btn ed-mini" data-cd="${esc((d.path === '/' ? '' : d.path) + '/' + e.name)}">Open</button>` : ''}
+                  ${!e.directory && e.editable ? `<button class="btn ed-mini" data-open="${esc((d.path === '/' ? '' : d.path) + '/' + e.name)}">${canWrite ? 'Edit' : 'View'}</button>` : ''}
+                </div>
+              </div>`)
+            .join('')
+          : '<div class="empty">Empty.</div>'
+      }
+    </div>
+    <div data-editor></div>`;
+}
+
+function editorPane(path, content, canWrite) {
+  return `
+    <div class="block">
+      <div class="block-label mono">${esc(path)}</div>
+      <textarea class="fld mono editorbox" data-filebody ${canWrite ? '' : 'readonly'}>${esc(content)}</textarea>
+      <div class="factions">
+        ${canWrite ? '<button class="btn btn-primary" data-savefile>Save</button>' : '<span class="dr">Read only — saving a config is Management.</span>'}
+        <button class="btn" data-closefile>Close</button>
+        <span class="fmsg" data-filemsg></span>
+      </div>
+      ${canWrite ? '<p class="rule-text re-hint">The server reads most of these only at startup, so a change usually needs a restart to take effect.</p>' : ''}
+    </div>`;
 }
 
 function worldsPane(d) {
@@ -392,6 +444,9 @@ function wirePanel(root, can) {
             wireConsole(slot, id);
           } else if (what === 'ports') {
             slot.innerHTML = portsPane(await api.dash.panelAllocations(id));
+          } else if (what === 'files') {
+            slot.innerHTML = filesPane(await api.dash.panelFiles(id, '/'), !!can.runCommands);
+            wireFiles(slot, id, can);
           } else if (what === 'activity') {
             slot.innerHTML = activityPane(await api.dash.panelActivities(id));
           } else if (what === 'backups') {
@@ -408,6 +463,62 @@ function wirePanel(root, can) {
         }
       });
     });
+  });
+}
+
+// Navigating and editing. Re-renders the pane in place on each hop rather than
+// keeping a tree in memory — a directory listing is cheap and the alternative is
+// a cache that goes stale the moment somebody uploads something.
+function wireFiles(slot, id, can) {
+  const canWrite = !!can.runCommands;
+
+  slot.querySelectorAll('[data-cd]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        slot.innerHTML = filesPane(await api.dash.panelFiles(id, btn.dataset.cd), canWrite);
+        wireFiles(slot, id, can);
+      } catch (err) {
+        btn.disabled = false;
+        slot.insertAdjacentHTML('beforeend', `<div class="empty">${esc(panelErr(err))}</div>`);
+      }
+    }),
+  );
+
+  const editor = slot.querySelector('[data-editor]');
+  slot.querySelectorAll('[data-open]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const path = btn.dataset.open;
+      editor.innerHTML = pageLoader();
+      try {
+        const { content } = await api.dash.panelFile(id, path);
+        editor.innerHTML = editorPane(path, content, canWrite);
+        wireEditor(editor, id, path, canWrite);
+      } catch (err) {
+        editor.innerHTML = `<div class="empty">${esc(panelErr(err))}</div>`;
+      }
+    }),
+  );
+}
+
+function wireEditor(editor, id, path, canWrite) {
+  const msg = editor.querySelector('[data-filemsg]');
+  editor.querySelector('[data-closefile]')?.addEventListener('click', () => { editor.innerHTML = ''; });
+
+  editor.querySelector('[data-savefile]')?.addEventListener('click', async (e) => {
+    const body = editor.querySelector('[data-filebody]').value;
+    if (!await confirmDanger(
+      'Save this file?',
+      `${path} is overwritten on the server. Most configs are only read at startup, so this usually needs a restart to take effect.`,
+      'Save it',
+    )) return;
+    const btn = e.currentTarget;
+    btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Writing…';
+    try {
+      await api.dash.panelWriteFile(id, path, body);
+      msg.className = 'fmsg ok'; msg.textContent = 'Written.';
+    } catch (err) { msg.className = 'fmsg bad'; msg.textContent = panelErr(err); }
+    finally { btn.disabled = false; }
   });
 }
 

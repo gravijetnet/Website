@@ -73,6 +73,54 @@ async function call(path, { method = 'GET', body } = {}) {
   throw new FeatherError('panel_error', message, 502);
 }
 
+/**
+ * The same call, for the endpoints that answer with a file rather than with
+ * JSON. Reading server.properties returns text/plain, so the JSON helper above
+ * would throw on the one response that is working exactly as intended.
+ */
+async function callRaw(path, { method = 'GET', body } = {}) {
+  if (!configured()) throw new FeatherError('not_configured', 'No panel credentials are set', 503);
+  let res;
+  try {
+    res = await fetch(`${config.feather.base}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${config.feather.key}`,
+        ...(body !== undefined ? { 'Content-Type': 'text/plain' } : {}),
+      },
+      body,
+      signal: AbortSignal.timeout(config.feather.timeoutMs),
+    });
+  } catch (err) {
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      throw new FeatherError('timeout', 'The panel did not answer in time', 504);
+    }
+    throw new FeatherError('unreachable', 'The panel could not be reached', 502);
+  }
+
+  const text = await res.text();
+  if (res.ok) {
+    // A write answers with the panel's usual JSON envelope; a read answers with
+    // the file. Only the envelope is worth unwrapping.
+    if (text.startsWith('{')) {
+      try {
+        const payload = JSON.parse(text);
+        if (payload.success === false) throw new FeatherError('panel_error', payload.message || 'panel refused', 502);
+        return typeof payload.data === 'string' ? payload.data : text;
+      } catch (e) {
+        if (e instanceof FeatherError) throw e;
+      }
+    }
+    return text;
+  }
+
+  let message = `panel returned ${res.status}`;
+  try { message = JSON.parse(text).message || message; } catch { /* not JSON */ }
+  if (/ip address/i.test(message)) throw new FeatherError('ip_not_allowed', message, 403);
+  if (res.status === 404) throw new FeatherError('not_found', message, 404);
+  throw new FeatherError('panel_error', message, 502);
+}
+
 // --- what the console asks for ---------------------------------------------
 
 const servers = (search) =>
@@ -98,6 +146,18 @@ const deleteBackup = (id, backupId) =>
 
 const worlds = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/worlds`);
 const players = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/playermanager`);
+
+// The files on the box. `files` lists a directory; `readFile` and `writeFile`
+// are how a config gets looked at and fixed without an SFTP client.
+const files = (id, dir) =>
+  call(`/api/user/servers/${encodeURIComponent(id)}/files?path=${encodeURIComponent(dir || '/')}`);
+const readFile = (id, file) =>
+  callRaw(`/api/user/servers/${encodeURIComponent(id)}/file?path=${encodeURIComponent(file)}`);
+const writeFile = (id, file, content) =>
+  callRaw(`/api/user/servers/${encodeURIComponent(id)}/write-file?path=${encodeURIComponent(file)}`, {
+    method: 'POST',
+    body: content,
+  });
 
 // The server's own console output. Wings hands these back as terminal lines,
 // escape codes and all — the panel is a terminal, we are a web page.
@@ -145,4 +205,5 @@ module.exports = {
   backups, createBackup, restoreBackup, deleteBackup,
   worlds, players, nodeStatus, allocation, POWER, FeatherError,
   logs, shareLogs, activities, allocations, cleanLog,
+  files, readFile, writeFile, callRaw,
 };

@@ -1273,3 +1273,10 @@ textarea.fld.mono { line-height: 1.45; }
 .tps { font-size: 16px; color: var(--mc-green); text-shadow: 2px 2px 0 #153f15; }
 .tps.warm { color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
 .tps.hot { color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515; }
+
+/* The file browser: a path line, then the listing, then the editor under it. */
+.filebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.editorbox {
+  width: 100%; min-height: 320px; resize: vertical;
+  font-size: 14px; line-height: 1.45; white-space: pre; overflow-wrap: normal; overflow-x: auto;
+}
