@@ -648,6 +648,7 @@ function playerCard(p, can) {
         </div>
 
         ${can.punishPlayers ? reachBlock() : ''}
+        ${toolsBlock(can)}
         ${(can.punishPlayers || can.banPlayers) ? punishBlock(p, can) : ''}
         ${can.manageRanks ? rankBlock(p) : ''}
 
@@ -714,6 +715,35 @@ const DURATIONS = [
 // Talking to somebody, or moving them, without punishing them — the two things a
 // moderator wants far more often than a ban. Both find the player on whichever
 // server they are on, so neither asks you to know where they are.
+// The things that are not punishments. Every one of them exists because
+// something is stuck — a session the network still believes in, a cooldown that
+// will not clear, a staff member locked out by the core's own security, somebody
+// on a real VPN who cannot get in.
+const TOOLS = [
+  { key: 'logout', label: 'Clear session', need: 'punishPlayers', note: 'For somebody the network still thinks is online.' },
+  { key: 'cooldowns', label: 'Clear cooldowns', need: 'punishPlayers', note: 'Drops every cooldown they are sitting on.' },
+  { key: 'undisguise', label: 'Undisguise', need: 'punishPlayers', note: 'Puts them back under their own name.' },
+  { key: 'security', label: 'Clear security hold', need: 'manageNetwork', note: 'The fix for “[Security] Unverified User”.' },
+  { key: 'vpn_allow', label: 'Allow past VPN check', need: 'manageNetwork', note: 'For a player on a legitimate VPN.' },
+  { key: 'vpn_deny', label: 'Re-apply VPN check', need: 'manageNetwork', note: 'Undoes the exemption.' },
+];
+
+function toolsBlock(can) {
+  const available = TOOLS.filter((t) => can[t.need]);
+  if (!available.length) return '';
+  return `
+    <div class="block" id="toolsblock">
+      <div class="block-label">Unstick</div>
+      <p class="rule-text">None of these punish anybody and none of them appear on a record. They are for when something is stuck.</p>
+      <div class="toolrow">
+        ${available
+          .map((t) => `<button class="btn" data-tool="${t.key}" title="${esc(t.note)}">${esc(t.label)}</button>`)
+          .join('')}
+      </div>
+      <span class="fmsg" id="toolmsg"></span>
+    </div>`;
+}
+
 function reachBlock() {
   return `
     <div class="block" id="reachblock">
@@ -740,6 +770,7 @@ function punishBlock(p, can) {
       <p class="rule-text">This takes effect in game, now, through the core — exactly as if you had typed the command. It is recorded against your name, which the player never sees.</p>
       <div class="prow">
         <select class="fld" id="ptype">
+          <option value="warn">Warn</option>
           <option value="mute">Mute</option>
           <option value="kick">Kick</option>
           <option value="ban">Ban</option>
@@ -817,8 +848,33 @@ function wirePlayerCard(body, card, p, can) {
   }
 
   wireReach(card, p);
+  wireTools(card, p, refresh);
   wirePunish(card, p, refresh);
   wireRank(card, p, refresh);
+}
+
+function wireTools(card, p, refresh) {
+  const msg = card.querySelector('#toolmsg');
+  if (!msg) return;
+  card.querySelectorAll('[data-tool]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const what = btn.textContent.trim();
+      btn.disabled = true;
+      msg.className = 'fmsg';
+      msg.textContent = 'Working…';
+      try {
+        const { jobId } = await api.dash.playerTool(p.name, btn.dataset.tool);
+        const row = await awaitJob(jobId, msg);
+        // The core reports what it actually did — "cleared 3", "there were none".
+        if (reportJob(msg, row, `${what}: ${row.result || 'done'}.`)) setTimeout(refresh, 900);
+      } catch (err) {
+        msg.className = 'fmsg bad';
+        msg.textContent = punishErr(err);
+      } finally {
+        btn.disabled = false;
+      }
+    }),
+  );
 }
 
 async function wireReach(card, p) {
@@ -902,6 +958,10 @@ const PUNISH_ERR = {
   bad_server: 'That is not a server name.',
   message_failed: 'The server errored while sending it.',
   send_failed: 'The server errored while moving them.',
+  bad_tool: 'That is not something the console can do.',
+  tool_failed: 'The server errored while doing it.',
+  bad_delay: 'A restart can be scheduled up to a day out.',
+  reboot_failed: 'The server errored while scheduling it.',
 };
 
 function punishErr(err) {
@@ -943,6 +1003,19 @@ function reportJob(msg, row, doneText) {
 }
 
 function wirePunish(card, p, refresh) {
+  // A warning and a kick happen once — asking "for how long" would be asking a
+  // question with no answer, so the duration goes away for those.
+  const typeSel = card.querySelector('#ptype');
+  const durSel = card.querySelector('#pdur');
+  if (typeSel && durSel) {
+    const sync = () => {
+      const instant = typeSel.value === 'kick' || typeSel.value === 'warn';
+      durSel.style.display = instant ? 'none' : '';
+    };
+    typeSel.addEventListener('change', sync);
+    sync();
+  }
+
   const btn = card.querySelector('#pdo');
   if (btn) {
     const msg = card.querySelector('#pmsg2');

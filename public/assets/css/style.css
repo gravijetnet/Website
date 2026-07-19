@@ -1158,3 +1158,10 @@ textarea.fld.mono { line-height: 1.45; }
 .srv-dot.on { background: var(--mc-green); }
 .srv-bar { width: 90px; height: 10px; flex-shrink: 0; background: #000; border: 2px solid var(--slot-lo); }
 .srv-bar span { display: block; height: 100%; background: var(--mc-green); }
+.srv-row { display: flex; align-items: center; gap: 10px; }
+.srv-card { margin-bottom: 8px; }
+.srv-card .srv-dot { margin-right: 2px; }
+
+/* The unstick tools: a row of plain buttons, deliberately not styled like the
+   punish controls above them — none of these go on anybody's record. */
+.toolrow { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }

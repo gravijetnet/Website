@@ -85,7 +85,7 @@ function discordRoleForRank(rankName) {
 // ban — the check has to see the duration to be the right check.
 router.post('/dash/punish', staff.requires('punishPlayers'), json, async (req, res) => {
   const type = String(req.body?.type || '').toLowerCase();
-  if (!['ban', 'mute', 'kick', 'blacklist'].includes(type)) {
+  if (!['ban', 'mute', 'kick', 'blacklist', 'warn'].includes(type)) {
     return res.status(400).json({ error: 'bad_type' });
   }
 
@@ -96,11 +96,13 @@ router.post('/dash/punish', staff.requires('punishPlayers'), json, async (req, r
   const reason = String(req.body?.reason || '').trim().slice(0, MAX_REASON);
   if (!reason) return res.status(400).json({ error: 'reason_required' });
 
-  // A kick happens once and has no length; a permanent punishment has no length
-  // either. Everything else needs one, and Phoenix will not take longer than its
-  // own configured ceiling.
+  // A kick happens once and has no length, and a warning is the same shape — a
+  // thing that happened rather than a state you are in. A permanent punishment
+  // has no length either. Everything else needs one, and Phoenix will not take
+  // longer than its own configured ceiling.
+  const instant = type === 'kick' || type === 'warn';
   let durationMs = 0;
-  if (type !== 'kick' && !permanent) {
+  if (!instant && !permanent) {
     durationMs = Number(req.body?.durationMs) || 0;
     if (durationMs <= 0) return res.status(400).json({ error: 'duration_required' });
     if (durationMs > actions.MAX_TEMP_MS) return res.status(400).json({ error: 'duration_too_long' });
@@ -125,7 +127,7 @@ router.post('/dash/punish', staff.requires('punishPlayers'), json, async (req, r
       targetUuid: identity.uuid,
       targetName: identity.name,
       durationMs,
-      permanent: type === 'kick' ? false : permanent,
+      permanent: instant ? false : permanent,
       reason,
       silent: !!req.body?.silent,
       actorUuid: await actorUuid(req),
@@ -368,6 +370,83 @@ router.post('/dash/player/send', staff.requires('punishPlayers'), json, async (r
     if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
     console.error('[dash player send]', err);
     res.status(500).json({ error: 'send_failed' });
+  }
+});
+
+// --- the smaller powers -----------------------------------------------------
+//
+// None of these punish anybody, which is exactly why they are worth having: they
+// are what a moderator needs when something is *stuck* rather than when somebody
+// misbehaved. Two of them reach further than the rest and are gated higher.
+const TOOLS = {
+  logout: { need: 'punishPlayers', label: 'cleared their session' },
+  cooldowns: { need: 'punishPlayers', label: 'cleared their cooldowns' },
+  undisguise: { need: 'punishPlayers', label: 'removed their disguise' },
+  // These two change who may get into the network at all.
+  security: { need: 'manageNetwork', label: 'cleared their security hold' },
+  vpn_allow: { need: 'manageNetwork', label: 'allowed them past the VPN check' },
+  vpn_deny: { need: 'manageNetwork', label: 'put them back behind the VPN check' },
+};
+
+router.post('/dash/player/tool', staff.requires('punishPlayers'), json, async (req, res) => {
+  const tool = String(req.body?.tool || '');
+  const spec = TOOLS[tool];
+  if (!spec) return res.status(400).json({ error: 'bad_tool' });
+  // Re-checked against what was actually asked for, the same way a permanent ban
+  // is re-checked above: the guard on the door is the lower of the two.
+  if (!req.staff.abilities[spec.need]) return res.status(403).json({ error: 'forbidden', need: spec.need });
+
+  try {
+    const identity = await playersLib.byName(String(req.body?.name || '').trim());
+    if (!identity) return res.status(404).json({ error: 'unknown_player' });
+
+    const jobId = await actions.enqueue({
+      action: tool,
+      targetUuid: identity.uuid,
+      targetName: identity.name,
+      actorUuid: await actorUuid(req),
+      actorLabel: label(req),
+    });
+    await audit.record(req, `tool.${tool}`, identity.uuid, { name: identity.name, jobId });
+    res.status(202).json({ ok: true, jobId });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash tool]', err);
+    res.status(500).json({ error: 'tool_failed' });
+  }
+});
+
+// --- restarts ---------------------------------------------------------------
+
+// A restart happens where it is run, so this is the one job that names a server:
+// only that box may claim it. The countdown is the core's own, so players get the
+// warnings they already know.
+router.post('/dash/server/reboot', staff.requires('manageNetwork'), json, async (req, res) => {
+  const server = String(req.body?.server || '').trim().slice(0, 64);
+  if (!server || !/^[A-Za-z0-9_-]{1,64}$/.test(server)) return res.status(400).json({ error: 'bad_server' });
+  const cancel = req.body?.cancel === true || req.body?.cancel === 'true';
+
+  // Up to a day out. Anything longer is somebody typing into the wrong box.
+  const seconds = Math.trunc(Number(req.body?.seconds));
+  if (!cancel && (!Number.isFinite(seconds) || seconds < 0 || seconds > 86400)) {
+    return res.status(400).json({ error: 'bad_delay' });
+  }
+
+  try {
+    const jobId = await actions.enqueue({
+      action: cancel ? 'reboot_cancel' : 'reboot',
+      targetUuid: CONSOLE_UUID,
+      durationMs: cancel ? 0 : seconds * 1000,
+      targetServer: server,
+      actorUuid: await actorUuid(req),
+      actorLabel: label(req),
+    });
+    await audit.record(req, cancel ? 'server.reboot_cancel' : 'server.reboot', server, { seconds, jobId });
+    res.status(202).json({ ok: true, jobId });
+  } catch (err) {
+    if (err.code === 'not_installed') return res.status(503).json({ error: 'plugin_missing' });
+    console.error('[dash reboot]', err);
+    res.status(500).json({ error: 'reboot_failed' });
   }
 });
 

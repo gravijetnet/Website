@@ -40,28 +40,120 @@ export async function renderServers(root, can) {
       <div class="ptile entry"><span class="pt-n">${closed ? 'closed' : 'open'}</span><span class="pt-l">network</span></div>
     </div>
 
-    <div class="board" id="srvlist">${
+    <div id="srvlist">${
       servers.length
-        ? servers.map(serverRow).join('')
-        : '<div class="empty">No server has reported in yet.</div>'
+        ? servers.map((s) => serverRow(s, !!can.manageNetwork)).join('')
+        : '<div class="board"><div class="empty">No server has reported in yet.</div></div>'
     }</div>
 
     ${can.manageNetwork ? maintenanceBlock(closed) : ''}`;
 
-  if (can.manageNetwork) wireMaintenance(root);
+  if (can.manageNetwork) {
+    wireMaintenance(root);
+    wireReboots(root);
+  }
 }
 
-function serverRow(s) {
+function wireReboots(root) {
+  root.querySelectorAll('.srv-card').forEach((card) => {
+    const server = card.dataset.server;
+    const msg = card.querySelector('[data-msg]');
+
+    card.querySelector('[data-reboot]').addEventListener('click', async (e) => {
+      const seconds = Number(card.querySelector('[data-delay]').value);
+      const when = seconds === 0 ? 'right now' : `in ${seconds / 60} minute${seconds === 60 ? '' : 's'}`;
+      if (!confirm(`Restart ${server} ${when}? Everyone on it will be disconnected.`)) return;
+      const btn = e.currentTarget;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Asking the server…';
+      try {
+        const { jobId } = await api.dash.reboot(server, seconds);
+        reportReboot(msg, await watchJob(jobId, msg));
+      } catch (err) { msg.className = 'fmsg bad'; msg.textContent = rebootErr(err); }
+      finally { btn.disabled = false; }
+    });
+
+    card.querySelector('[data-rebootcancel]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Cancelling…';
+      try {
+        const { jobId } = await api.dash.rebootCancel(server);
+        reportReboot(msg, await watchJob(jobId, msg));
+      } catch (err) { msg.className = 'fmsg bad'; msg.textContent = rebootErr(err); }
+      finally { btn.disabled = false; }
+    });
+  });
+}
+
+// A restart is claimed only by the server it names, so if that box is down
+// nothing picks it up — which is worth saying rather than spinning forever.
+async function watchJob(jobId, msg) {
+  for (let i = 0; i < 15; i++) {
+    let row;
+    try { row = await api.dash.action(jobId); } catch { return { status: 'unknown' }; }
+    if (row.status === 'done' || row.status === 'failed') return row;
+    if (msg) msg.textContent = 'Waiting for the server…';
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return { status: 'pending' };
+}
+
+function reportReboot(msg, row) {
+  if (row.status === 'done') { msg.className = 'fmsg ok'; msg.textContent = row.result || 'Done.'; return; }
+  if (row.status === 'failed') { msg.className = 'fmsg bad'; msg.textContent = `The server refused it: ${row.result || 'no reason'}`; return; }
+  msg.className = 'fmsg bad';
+  msg.textContent = 'That server did not pick it up — is it running?';
+}
+
+function rebootErr(err) {
+  const code = err?.body?.error;
+  if (code === 'plugin_missing') return 'The plugin build that can restart a server has not reached it yet.';
+  if (code === 'bad_delay') return 'A restart can be scheduled up to a day out.';
+  if (code === 'bad_server') return 'That is not a server name.';
+  return 'That did not go through.';
+}
+
+// Each server is a roll-out card: the line you scan, and — for anyone who may —
+// the restart controls behind it, so a button that empties a server is never a
+// thing you can hit while reading the list.
+function serverRow(s, canRestart) {
   const pct = s.max > 0 ? Math.min(100, Math.round((s.online / s.max) * 100)) : 0;
+  const head = `
+    <span class="srv-dot ${s.up ? 'on' : ''}" title="${s.up ? 'Answering' : 'Not answering'}"></span>
+    <span class="cs-name">${esc(s.name)}</span>
+    ${s.whitelisted ? '<span class="re-tag">closed</span>' : ''}
+    <span class="dr">${s.group ? esc(s.group) : ''}</span>
+    <span class="cs-meta">${s.up ? `${int(s.online)} / ${int(s.max)}` : `last seen ${timeAgo(s.updatedAt)}`}</span>`;
+
+  if (!canRestart) {
+    return `<div class="board-row entry srv-row">${head}<div class="srv-bar" title="${pct}% full"><span style="width:${pct}%"></span></div></div>`;
+  }
+
   return `
-    <div class="board-row entry" style="grid-template-columns:auto 1fr auto;gap:12px">
-      <span class="srv-dot ${s.up ? 'on' : ''}" title="${s.up ? 'Answering' : 'Not answering'}"></span>
-      <div style="min-width:0">
-        <div class="dn">${esc(s.name)}${s.whitelisted ? ' <span class="re-tag">closed</span>' : ''}</div>
-        <div class="dr">${s.group ? `${esc(s.group)} · ` : ''}${s.up ? `${int(s.online)} of ${int(s.max)}` : `last seen ${timeAgo(s.updatedAt)}`}</div>
+    <details class="panel entry card-roll srv-card" data-server="${esc(s.name)}">
+      <summary class="card-sum">${head}</summary>
+      <div class="panel-body">
+        <div class="ptiles ptiles-4" style="margin-bottom:10px">
+          <div class="ptile entry"><span class="pt-n">${int(s.online)}</span><span class="pt-l">online</span></div>
+          <div class="ptile entry"><span class="pt-n">${int(s.max)}</span><span class="pt-l">capacity</span></div>
+          <div class="ptile entry"><span class="pt-n">${pct}%</span><span class="pt-l">full</span></div>
+          <div class="ptile entry"><span class="pt-n">${s.up ? 'up' : 'down'}</span><span class="pt-l">${esc(timeAgo(s.updatedAt))}</span></div>
+        </div>
+        <div class="block-label">Restart</div>
+        <p class="rule-text">Uses the core's own countdown, so players get the warnings they already know. Only this server takes the job.</p>
+        <div class="factions">
+          <select class="fld" data-delay>
+            <option value="0">now</option>
+            <option value="60" selected>in 1 minute</option>
+            <option value="300">in 5 minutes</option>
+            <option value="900">in 15 minutes</option>
+            <option value="1800">in 30 minutes</option>
+          </select>
+          <button class="btn btn-danger" data-reboot>Restart ${esc(s.name)}</button>
+          <button class="btn" data-rebootcancel>Cancel</button>
+          <span class="fmsg" data-msg></span>
+        </div>
       </div>
-      <div class="srv-bar" title="${pct}% full"><span style="width:${pct}%"></span></div>
-    </div>`;
+    </details>`;
 }
 
 function maintenanceBlock(closed) {

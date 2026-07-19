@@ -142,6 +142,12 @@ export const api = {
     // Reaching one player where they are standing.
     playerMessage: (name, message) => send('/dash/player/message', 'POST', { name, message }),
     playerSend: (name, server) => send('/dash/player/send', 'POST', { name, server }),
+    // The smaller powers — unsticking rather than punishing.
+    playerTool: (name, tool) => send('/dash/player/tool', 'POST', { name, tool }),
+
+    // Restarts, on one named server.
+    reboot: (server, seconds) => send('/dash/server/reboot', 'POST', { server, seconds }),
+    rebootCancel: (server) => send('/dash/server/reboot', 'POST', { server, cancel: true }),
 
     // The network as it is right now, and the switch that closes it.
     servers: () => get('/dash/servers'),

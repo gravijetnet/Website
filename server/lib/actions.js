@@ -47,7 +47,13 @@ function isMissingTable(err) {
 // `alert` has no target — it is the core's own staff broadcast — but it rides
 // this queue rather than the fan-out one because Phoenix propagates it itself,
 // so exactly one server may send it. See ActionQueue.alert.
-const ACTIONS = new Set(['ban', 'mute', 'kick', 'blacklist', 'revoke', 'grant', 'ungrant', 'alert']);
+const ACTIONS = new Set([
+  'ban', 'mute', 'kick', 'blacklist', 'warn', 'revoke', 'grant', 'ungrant', 'alert',
+  // The smaller powers: none of these punish anybody, they unstick things.
+  'logout', 'cooldowns', 'security', 'vpn_allow', 'vpn_deny', 'undisguise',
+  // Server-targeted — these carry a targetServer and only that box may claim them.
+  'reboot', 'reboot_cancel',
+]);
 
 // Phoenix's own ceiling, from settings.yml (`max-temp-duration: 365d`). Asking
 // for longer is asking for something the core will refuse.
@@ -67,8 +73,9 @@ async function enqueue(job) {
       'phoenix',
       'INSERT INTO `mod_actions`'
         + ' (`action`, `target_uuid`, `target_name`, `rank_name`, `punishment_id`, `duration_ms`,'
-        + '  `permanent`, `reason`, `silent`, `actor_uuid`, `actor_label`, `status`, `created_at`)'
-        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())",
+        + '  `permanent`, `reason`, `silent`, `actor_uuid`, `actor_label`, `target_server`,'
+        + '  `status`, `created_at`)'
+        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())",
       [
         job.action,
         job.targetUuid,
@@ -81,13 +88,38 @@ async function enqueue(job) {
         job.silent ? 1 : 0,
         job.actorUuid || null,
         job.actorLabel,
+        job.targetServer || null,
       ],
     );
     return res.insertId;
   } catch (err) {
     if (isMissingTable(err)) throw new NotInstalled();
+    // A server still on the build before server-targeting has the table without
+    // the column. Anything that names a server genuinely cannot run there.
+    if (err && (err.code === 'ER_BAD_FIELD_ERROR' || err.errno === 1054)) {
+      if (job.targetServer) throw new NotInstalled();
+      return enqueueLegacy(job);
+    }
     throw err;
   }
+}
+
+// The insert as it was before jobs could name a server, for servers still
+// running that build. Everything except a server-targeted job works fine there.
+async function enqueueLegacy(job) {
+  const res = await sql.query(
+    'phoenix',
+    'INSERT INTO `mod_actions`'
+      + ' (`action`, `target_uuid`, `target_name`, `rank_name`, `punishment_id`, `duration_ms`,'
+      + '  `permanent`, `reason`, `silent`, `actor_uuid`, `actor_label`, `status`, `created_at`)'
+      + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())",
+    [
+      job.action, job.targetUuid, job.targetName || null, job.rankName || null,
+      job.punishmentId || null, Number(job.durationMs) || 0, job.permanent ? 1 : 0,
+      job.reason || null, job.silent ? 1 : 0, job.actorUuid || null, job.actorLabel,
+    ],
+  );
+  return res.insertId;
 }
 
 /** How a job ended, for the page that queued it. */
