@@ -14,7 +14,7 @@
 import { api } from './api.js';
 import { icons } from './icons.js';
 import { pageLoader, notice } from './components.js';
-import { paintStaffTabs, STAFF_TABS, NETWORK_PAGES, tabAllowed } from './shell.js';
+import { STAFF_TABS, NETWORK_PAGES, CONSOLE_NAV, tabAllowed } from './shell.js';
 import { esc, head, int, timeAgo, dateShort, playtime, dur } from './util.js';
 import { renderRulesEditor } from './dash-rules.js';
 import { renderAccess } from './dash-access.js';
@@ -56,24 +56,23 @@ export async function renderStaffDash(root, tab, sub) {
   }
 
   const can = me.user.can || {};
-  paintStaffTabs(can);
 
   const allowed = STAFF_TABS.filter((t) => tabAllowed(t, can));
   const active = allowed.find((t) => t.key === tab);
   if (!active) {
-    root.innerHTML = notice(
+    root.innerHTML = `<section class="section"><div class="container">${notice(
       allowed.length ? 'No such page' : 'Nothing to do',
       allowed.length ? 'That is not a page on Spielplatz.' : 'Your rank has no Spielplatz permissions.',
-    );
+    )}</div></section>`;
     return;
   }
 
-  // Every page but the front one gets a way back to it. The mark top-left leaves
-  // for example.invalid, so without this the pages off the strip would be places you
-  // could reach and not leave.
+  // The list down the side carries every destination, so there is no crumb to
+  // add and nothing hidden behind a menu: wherever you are, everywhere else is
+  // one click and in the same place it was last time.
   root.innerHTML = `
-    <section class="section"><div class="container">
-      ${active.key ? '<a class="crumb" href="/">Spielplatz</a>' : ''}
+    <section class="section"><div class="container console-layout">
+      ${sidebar(can, tab, sub)}
       <div id="cbody">${pageLoader()}</div>
     </div></section>`;
   const body = root.querySelector('#cbody');
@@ -111,13 +110,10 @@ async function paintNetwork(body, can, sub) {
   }
   const page = pages.find((p) => p.key === sub) || pages[0];
 
-  body.innerHTML = `
-    <nav class="subtabs">
-      ${pages
-        .map((p) => `<a class="subtab ${p.key === page.key ? 'active' : ''}" href="/network/${p.key}">${esc(p.label)}</a>`)
-        .join('')}
-    </nav>
-    <div id="npage">${pageLoader()}</div>`;
+  // No row of sub-tabs here any more: every one of these pages is in the list
+  // down the side, so repeating them above the content would be saying the same
+  // thing twice in two different shapes.
+  body.innerHTML = `<div id="npage">${pageLoader()}</div>`;
 
   const npage = body.querySelector('#npage');
   if (page.key === 'servers') await renderServers(npage, can);
@@ -155,47 +151,42 @@ function statusOf() {
   return new URLSearchParams(location.search).get('status') || '';
 }
 
-// --- the console's own front page ------------------------------------------
+// --- the list down the side -------------------------------------------------
 
-// What each destination is for, in the words somebody would use to ask for it.
-// A menu of eleven bare nouns is a puzzle; this is a menu.
-const HUB = {
-  applications: { icon: 'staff', desc: 'Who has asked to join the team' },
-  reports: { icon: 'report', desc: 'What players have filed against each other' },
-  appeals: { icon: 'shield', desc: 'Punishments being contested' },
-  players: { icon: 'search', desc: 'Look anyone up, punish, lift, promote' },
-  users: { icon: 'users', desc: 'Everyone who has signed in to the site' },
-  logs: { icon: 'clock', desc: 'Every command run and every line said' },
-  rules: { icon: 'rules', desc: 'Edit the public rulebook' },
-  network: { icon: 'bolt', desc: 'Ranks, ladders, filters, tags, broadcasts, backups' },
-  access: { icon: 'shield', desc: 'Who can do what in here' },
-  audit: { icon: 'clock', desc: 'Every decision made here, against a name' },
-};
+// Which entry is the one you are looking at. Compared on the whole path so
+// /network/ranks lights Ranks and not Servers, and the bare "/" only lights the
+// queue rather than every path that starts with a slash.
+function currentPath(tab, sub) {
+  if (!tab) return '/';
+  return sub ? `/${tab}/${sub}` : `/${tab}`;
+}
 
-// The strip carries the five places a shift moves between; this carries all of
-// them, so nothing is one tab-strip overflow away from being unreachable.
-function hubGrid(can) {
-  const cards = STAFF_TABS.filter((t) => t.key && tabAllowed(t, can));
-  if (!cards.length) return '';
+function sidebar(can, tab, sub) {
+  const here = currentPath(tab, sub);
+  // The network group defaults to its first page, so /network alone still marks
+  // something rather than nothing.
+  const fallback = tab === 'network' && !sub ? '/network/servers' : null;
+
+  const groups = CONSOLE_NAV
+    .map((g) => ({ ...g, items: g.items.filter((i) => can[i.need]) }))
+    .filter((g) => g.items.length);
+
   return `
-    <div class="block">
-      <div class="block-label">Everywhere in Spielplatz</div>
-      <div class="hubgrid">
-        ${cards
-          .map((t) => {
-            const h = HUB[t.key] || { icon: 'shield', desc: '' };
-            return `
-          <a class="hubcard entry" href="/${t.key}">
-            <div class="glyph glyph-sm">${icons[h.icon] || icons.shield}</div>
-            <div style="min-width:0">
-              <div class="hub-t">${esc(t.label)}</div>
-              <div class="hub-d">${esc(h.desc)}</div>
-            </div>
-          </a>`;
-          })
-          .join('')}
-      </div>
-    </div>`;
+    <nav class="conside" aria-label="Spielplatz">
+      ${groups
+        .map(
+          (g) => `
+        <div class="cg">
+          ${g.group ? `<div class="cg-label">${esc(g.group)}</div>` : ''}
+          ${g.items
+            .map(
+              (i) => `<a class="cg-item ${i.path === here || i.path === fallback ? 'active' : ''}" href="${i.path}">${esc(i.label)}</a>`,
+            )
+            .join('')}
+        </div>`,
+        )
+        .join('')}
+    </nav>`;
 }
 
 // --- the queue -------------------------------------------------------------
@@ -249,7 +240,6 @@ async function paintQueue(body, can, me) {
         : `<div class="board"><div class="empty">The queue is empty. Nothing is waiting on you.</div></div>`
     }</div>
 
-    ${hubGrid(can)}
 
     ${
       stats

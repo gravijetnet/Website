@@ -14,6 +14,7 @@
 import { api } from './api.js';
 import { esc, dur, timeAgo, dateShort } from './util.js';
 import { pageLoader, notice } from './components.js';
+import { ask, confirmDanger } from './modal.js';
 
 // --- Minecraft colour codes, rendered ---------------------------------------
 // So a prefix reads as what it will look like in chat, not as `&aHelper &8|`.
@@ -339,7 +340,7 @@ function wireRanks(root, allRanks, pool) {
     });
 
     del.addEventListener('click', async () => {
-      if (!confirm(`Delete the rank "${name}"? Anyone holding it falls back to the default rank. This applies in game.`)) return;
+      if (!await confirmDanger(`Delete the rank ${name}?`, 'Anyone holding it falls back to the default rank. This applies in game.', 'Delete rank')) return;
       del.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Queuing…';
       try {
         const { jobId } = await api.dash.saveRank({ op: 'delete', name });
@@ -603,7 +604,7 @@ function wireReportMenu(root) {
       finally { btn.disabled = false; }
     });
     card.querySelector('[data-catdel]').addEventListener('click', async (e) => {
-      if (!confirm(`Delete the report category "${name}"?`)) return;
+      if (!await confirmDanger(`Delete the category ${name}?`, 'Players will no longer be able to report under it.', 'Delete')) return;
       const btn = e.currentTarget;
       btn.disabled = true;
       try { await api.dash.saveCategory({ op: 'delete', name }); card.remove(); }
@@ -704,7 +705,7 @@ function wireBackups(root) {
     });
 
     card.querySelector('[data-restore]').addEventListener('click', async (e) => {
-      if (!confirm('Restore this backup? It re-applies its ranks, ladders, report menu and rules in game.')) return;
+      if (!await ask({ title: 'Restore this backup?', body: 'It re-applies its ranks, ladders, report menu and rules in game.', confirmLabel: 'Restore' })) return;
       const btn = e.currentTarget;
       btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Restoring…';
       try {
@@ -716,7 +717,7 @@ function wireBackups(root) {
     });
 
     card.querySelector('[data-delbk]').addEventListener('click', async (e) => {
-      if (!confirm('Delete this backup? The copy is gone; the live config is untouched.')) return;
+      if (!await confirmDanger('Delete this backup?', 'The copy is gone. The live config is untouched.', 'Delete')) return;
       const btn = e.currentTarget;
       btn.disabled = true;
       try { await api.dash.deleteBackup(id); card.remove(); }
@@ -830,7 +831,7 @@ function wireFilters(root) {
       finally { btn.disabled = false; }
     });
     card.querySelector('[data-fdel]').addEventListener('click', async (e) => {
-      if (!confirm(`Delete the filter "${name}"? Chat stops being matched against it.`)) return;
+      if (!await confirmDanger(`Delete the filter ${name}?`, 'Chat stops being matched against it.', 'Delete')) return;
       const btn = e.currentTarget;
       btn.disabled = true;
       try { await api.dash.saveFilter({ op: 'delete', name }); card.remove(); }
@@ -952,7 +953,7 @@ function wireTags(root) {
       finally { btn.disabled = false; }
     });
     card.querySelector('[data-tdel]').addEventListener('click', async (e) => {
-      if (!confirm('Delete this tag? Anyone wearing it loses it.')) return;
+      if (!await confirmDanger('Delete this tag?', 'Anyone wearing it loses it.', 'Delete')) return;
       const btn = e.currentTarget;
       btn.disabled = true;
       try { await api.dash.saveTag({ op: 'delete', id }); card.remove(); }

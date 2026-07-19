@@ -8,6 +8,7 @@
 import { api } from './api.js';
 import { esc, head, timeAgo, dateShort } from './util.js';
 import { pageLoader, notice } from './components.js';
+import { confirmDanger } from './modal.js';
 
 export async function renderUsers(root, can = {}) {
   root.innerHTML = pageLoader();
@@ -51,7 +52,7 @@ function wireLinks(list) {
   list.querySelectorAll('[data-unlink]').forEach((btn) =>
     btn.addEventListener('click', async () => {
       const id = btn.dataset.unlink;
-      if (!confirm('Break this account link? Their in-game rank stops following their Discord roles until they link again.')) return;
+      if (!await confirmDanger('Break this account link?', 'Their in-game rank stops following their Discord roles until they link again.', 'Break link')) return;
       btn.disabled = true;
       try {
         const { was } = await api.dash.breakLink(id);

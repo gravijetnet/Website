@@ -8,6 +8,7 @@
 import { api } from './api.js';
 import { esc, int, timeAgo } from './util.js';
 import { pageLoader, notice } from './components.js';
+import { ask, confirmDanger } from './modal.js';
 
 export async function renderServers(root, can) {
   root.innerHTML = pageLoader();
@@ -62,7 +63,7 @@ function wireReboots(root) {
     card.querySelector('[data-reboot]').addEventListener('click', async (e) => {
       const seconds = Number(card.querySelector('[data-delay]').value);
       const when = seconds === 0 ? 'right now' : `in ${seconds / 60} minute${seconds === 60 ? '' : 's'}`;
-      if (!confirm(`Restart ${server} ${when}? Everyone on it will be disconnected.`)) return;
+      if (!await confirmDanger(`Restart ${server} ${when}?`, 'Everyone on it will be disconnected.', 'Restart')) return;
       const btn = e.currentTarget;
       btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Asking the server…';
       try {
@@ -79,7 +80,7 @@ function wireReboots(root) {
       cmdBtn.addEventListener('click', async () => {
         const command = cmdIn.value.trim();
         if (!command) { cmdMsg.className = 'fmsg bad'; cmdMsg.textContent = 'Type a command.'; return; }
-        if (!confirm(`Run "${command}" as console on ${server}?`)) return;
+        if (!await confirmDanger('Run this as console?', `${command}\n\non ${server}`, 'Run it')) return;
         cmdBtn.disabled = true; cmdMsg.className = 'fmsg'; cmdMsg.textContent = 'Running…';
         try {
           const { jobId } = await api.dash.runCommand(server, command);
@@ -230,10 +231,15 @@ function wireMaintenance(root) {
   const closing = btn.textContent.includes('Close');
 
   btn.addEventListener('click', async () => {
-    const confirmText = closing
-      ? 'Close the network? Nobody but those the core lets through will be able to join.'
-      : 'Open the network again?';
-    if (!confirm(confirmText)) return;
+    const ok = await ask({
+      title: closing ? 'Close the network?' : 'Open the network again?',
+      body: closing
+        ? 'Nobody but those the core lets through will be able to join.'
+        : 'Anybody will be able to join again.',
+      confirmLabel: closing ? 'Close it' : 'Open it',
+      danger: closing,
+    });
+    if (!ok) return;
     btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Asking the network…';
     try {
       await api.dash.maintenance(closing);

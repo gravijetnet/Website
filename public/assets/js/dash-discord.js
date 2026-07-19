@@ -11,6 +11,7 @@
 import { api } from './api.js';
 import { esc } from './util.js';
 import { pageLoader, notice } from './components.js';
+import { ask, confirmDanger } from './modal.js';
 
 const ERR = {
   bad_channel: 'That is not a channel id.',
@@ -128,7 +129,7 @@ function wireDiscord(root) {
     if (!channelId) { smsg.className = 'fmsg bad'; smsg.textContent = 'Which channel?'; return; }
     if (!message) { smsg.className = 'fmsg bad'; smsg.textContent = 'Type a message first.'; return; }
     const embed = root.querySelector('#dembed').checked;
-    if (!confirm(`Post this to ${channelId}?`)) return;
+    if (!await ask({ title: 'Post this to Discord?', body: message, confirmLabel: 'Post' })) return;
     send.disabled = true; smsg.className = 'fmsg'; smsg.textContent = 'Asking the bot…';
     try {
       const { taskId } = await api.dash.discordMessage({
@@ -147,7 +148,7 @@ function wireDiscord(root) {
       const reason = root.querySelector('#dreason').value.trim();
       if (!discordId) { mmsg.className = 'fmsg bad'; mmsg.textContent = 'Which member?'; return; }
       if (!reason) { mmsg.className = 'fmsg bad'; mmsg.textContent = 'A reason is required.'; return; }
-      if (!confirm(`${action} that member?`)) return;
+      if (!await confirmDanger(`${action} that member?`, reason, action)) return;
       btn.disabled = true; mmsg.className = 'fmsg'; mmsg.textContent = 'Asking the bot…';
       try {
         const { taskId } = await api.dash.discordMember({

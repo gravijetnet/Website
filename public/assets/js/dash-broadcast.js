@@ -8,6 +8,7 @@ import { api } from './api.js';
 import { esc, timeAgo } from './util.js';
 import { pageLoader, notice } from './components.js';
 import { mcPreview } from './dash-network.js';
+import { ask } from './modal.js';
 
 // The prefix Phoenix puts in front of its own staff alerts. Kept here only so
 // the preview matches what the game will actually print; the plugin is what
@@ -77,7 +78,11 @@ export async function renderBroadcast(root) {
     const message = input.value.trim();
     if (!message) { msg.className = 'fmsg bad'; msg.textContent = 'Type a message first.'; return; }
     const kind = root.querySelector('#bckind').value;
-    if (!confirm(`Send this to ${kind === 'staff' ? 'all staff' : 'everyone'} in game?`)) return;
+    if (!await ask({
+      title: kind === 'staff' ? 'Send this alert to all staff?' : 'Send this to everyone in game?',
+      body: message,
+      confirmLabel: 'Send',
+    })) return;
     btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Sending…';
     try {
       const res = await api.dash.broadcast(kind, message);

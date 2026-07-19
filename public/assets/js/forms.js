@@ -8,6 +8,7 @@ import { api } from './api.js';
 import { icons } from './icons.js';
 import { notice } from './components.js';
 import { esc, timeAgo } from './util.js';
+import { tell } from './modal.js';
 
 // --------------------------------------------------------------- shared bits
 
@@ -176,11 +177,11 @@ function wireUploader(root, q, uploaded, maxBytes, maxFiles) {
     for (const file of files) {
       const total = Object.values(uploaded).reduce((n, a) => n + a.length, 0);
       if (total >= maxFiles) {
-        alert(`That is the most screenshots an application takes (${maxFiles}).`);
+        tell('That is enough screenshots', `An application takes at most ${maxFiles}.`);
         break;
       }
       if (file.size > maxBytes) {
-        alert(`${file.name} is larger than ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+        tell('That file is too big', `${file.name} is larger than ${Math.round(maxBytes / 1024 / 1024)} MB.`);
         continue;
       }
       const item = { id: null, name: file.name, uploading: true };
@@ -194,7 +195,7 @@ function wireUploader(root, q, uploaded, maxBytes, maxFiles) {
         // A failed upload should not sit in the list pretending to be attached.
         const at = uploaded[q.index].indexOf(item);
         if (at >= 0) uploaded[q.index].splice(at, 1);
-        alert(`${file.name} could not be uploaded.`);
+        tell('That did not upload', `${file.name} could not be uploaded.`);
       }
       draw();
     }

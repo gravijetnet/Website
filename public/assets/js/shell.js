@@ -92,6 +92,63 @@ export const STAFF_TABS = [
   { key: 'audit', label: 'Audit', need: 'viewReports' },
 ];
 
+// The console's navigation, in full and in order.
+//
+// It went through a strip of eleven tabs (unreadable), then five (a compromise
+// that hid the other six). The answer was neither: a console with twenty
+// destinations wants a list down the side, grouped by what you came to do, and a
+// header carrying nothing at all. Every page is here, every page is one click,
+// and the strip along the top is gone.
+//
+// Order is by frequency of use, not by permission: the queue, then the things
+// waiting on a human, then people, then the network, then the record.
+export const CONSOLE_NAV = [
+  { group: '', items: [{ path: '/', label: 'Queue', need: 'viewReports' }] },
+  {
+    group: 'Waiting on you',
+    items: [
+      { path: '/applications', label: 'Applications', need: 'viewApplications' },
+      { path: '/reports', label: 'Reports', need: 'viewReports' },
+      { path: '/appeals', label: 'Appeals', need: 'viewAppeals' },
+    ],
+  },
+  {
+    group: 'People',
+    items: [
+      { path: '/players', label: 'Players', need: 'viewPlayers' },
+      { path: '/users', label: 'Users', need: 'viewPlayers' },
+    ],
+  },
+  {
+    group: 'The network',
+    items: [
+      { path: '/network/servers', label: 'Servers', need: 'viewReports' },
+      { path: '/network/broadcast', label: 'Broadcast', need: 'broadcast' },
+      { path: '/network/discord', label: 'Discord', need: 'broadcast' },
+      { path: '/network/ranks', label: 'Ranks', need: 'manageNetwork' },
+      { path: '/network/ladders', label: 'Ladders', need: 'manageNetwork' },
+      { path: '/network/filters', label: 'Chat filters', need: 'manageNetwork' },
+      { path: '/network/reportmenu', label: 'Report menu', need: 'manageNetwork' },
+      { path: '/network/tags', label: 'Tags', need: 'manageNetwork' },
+    ],
+  },
+  {
+    group: 'The record',
+    items: [
+      { path: '/logs', label: 'Logs', need: 'viewReports' },
+      { path: '/audit', label: 'Audit', need: 'viewReports' },
+    ],
+  },
+  {
+    group: 'Settings',
+    items: [
+      { path: '/rules', label: 'Rules', need: 'manageRules' },
+      { path: '/access', label: 'Access', need: 'manageAccess' },
+      { path: '/network/backups', label: 'Backups', need: 'manageNetwork' },
+    ],
+  },
+];
+
 // Everything that edits the network's own configuration lives under the Network
 // tab. As tabs these were eleven entries in a strip nobody could scan; as one
 // destination with its own row of pages they are a place you go, and then choose
@@ -236,8 +293,9 @@ function playerChrome() {
 // The mark still goes to example.invalid, because that is what a mark in that
 // corner does — a console you cannot leave by the obvious door is a trap.
 function staffChrome() {
-  // Two tiers here too — and this surface needed it most: the console can carry
-  // eight tabs, which never fit beside the mark and the account on one line.
+  // Nothing but the mark and you. The console's twenty destinations live in a
+  // list down the side of the page (CONSOLE_NAV), where they can be grouped and
+  // read; no arrangement of them along the top survived contact with the number.
   document.getElementById('nav').innerHTML = `
     <div class="hud-inner">
       <a class="console-mark" href="${SITE || 'https://example.invalid'}/" ${SITE ? 'data-ext' : ''} title="Back to example.invalid">
@@ -245,9 +303,6 @@ function staffChrome() {
         <span class="cm-sub">staff dashboard</span>
       </a>
       <div class="nav-right"><div id="who"></div></div>
-    </div>
-    <div class="subnav-inner">
-      <nav class="nav-links" id="stabs"></nav>
     </div>`;
 
   document.getElementById('footer').innerHTML = `
@@ -260,18 +315,8 @@ function staffChrome() {
     </div>`;
 }
 
-/**
- * The console's tabs, drawn once the caller's abilities are known. Called by the
- * dashboard rather than the shell because the shell must not block on /me.
- */
-export function paintStaffTabs(can = {}) {
-  const box = document.getElementById('stabs');
-  if (!box) return;
-  box.innerHTML = STAFF_TABS.filter((t) => t.header && tabAllowed(t, can))
-    .map((t) => `<a href="/${t.key}" data-match="/${t.key}">${esc(t.label)}</a>`)
-    .join('');
-  markActive(location.pathname);
-}
+// (The console used to paint a strip of tabs here. It carries none: see
+// CONSOLE_NAV and the list dash-staff draws down the side of the page.)
 
 // ------------------------------------------------------------------- shared
 

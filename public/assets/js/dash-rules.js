@@ -11,6 +11,7 @@
 import { api } from './api.js';
 import { notice } from './components.js';
 import { esc, timeAgo } from './util.js';
+import { confirmDanger } from './modal.js';
 
 // The working copy. Edited in place, serialized on save. Kept at module scope so
 // a stray re-render cannot silently drop half of somebody's unsaved work.
@@ -146,8 +147,8 @@ function wireEditor(root) {
   root.querySelectorAll('.ed-sec').forEach((secEl) => {
     const si = Number(secEl.dataset.si);
 
-    secEl.querySelector('[data-delsec]').addEventListener('click', () => {
-      if (!confirm('Delete this whole section?')) return;
+    secEl.querySelector('[data-delsec]').addEventListener('click', async () => {
+      if (!await confirmDanger('Delete this whole section?', 'Every rule in it goes with it.', 'Delete section')) return;
       harvest(root);
       model.splice(si, 1);
       dirty = true;
@@ -231,7 +232,7 @@ function wireBar(root) {
   });
 
   root.querySelector('#reset').addEventListener('click', async () => {
-    if (!confirm('Throw away every edit and go back to the rules the site shipped with?')) return;
+    if (!await confirmDanger('Reset the rulebook?', 'Every edit is thrown away and the rules go back to the ones the site shipped with.', 'Reset')) return;
     try {
       await api.dash.resetRules();
       await renderRulesEditor(root, { manageRules: true });
