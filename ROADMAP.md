@@ -57,7 +57,8 @@ text; who has signed in; per-person access overrides.
 
 ## Phase A — more with the Minecraft servers
 
-Ordered by what a moderator reaches for most, not by what is easiest.
+**Status: done, except A2 and A11 (see below).** Ordered by what a moderator
+reaches for most, not by what is easiest.
 
 ### A1 · The player dossier
 One page that answers everything about a player. Today the card shows ranks,
@@ -71,8 +72,11 @@ punishments and alts; it should also show:
 - **Cooldown count** — `ICooldownHandler.getCooldownCount(uuid)`.
 - **Their chat, filtered to them** — the log tab already holds it.
 
-### A2 · Staff notes on a player
-`IProfile.getNotes()` returns `INote`. The thing every moderation team improvises
+### A2 · Staff notes on a player — **not built**
+`IProfile.getNotes()` returns `INote`, but the collection is empty, so there is
+no observable shape to write against, and `INote` has no constructor in the API —
+the same gap permissions had. It would need the same reflection treatment.
+Deliberately left rather than guessed at. The thing every moderation team improvises
 in a Discord channel, kept where the next person will actually find it.
 
 ### A3 · Chat snapshots as evidence
@@ -110,7 +114,8 @@ the fix for a locked-out admin.
 `DisguiseHandler.undisguise(profile, …)`, `getAllDisguisedProfiles()` — see who is
 disguised and drop it.
 
-### A11 · Notifications
+### A11 · Notifications — **not built**
+Same gap: `saveNotification` takes an `INotification` the API will not construct.
 `INotificationHandler.saveNotification(…)` — a message that waits for a player
 rather than needing them online, unlike A-side messaging.
 
@@ -127,14 +132,17 @@ Who is on right now and on which server, from the published server rows plus
 
 ## Phase B — Discord
 
-All of this runs through `discord_tasks` and the bot; each item needs the bot
-redeployed to its volume.
+**Status: B1, B3 and B5 done and deployed.** All of this runs through
+`discord_tasks` and the bot.
 
 - **B1 · Post to a channel** — a message or a proper embed, from the panel.
-- **B2 · Members** — list, search, see roles, see who is linked to which account.
+- **B2 · Members** — *partly done.* The Users tab lists everyone who has signed
+  in, with their roles and linked account. A full guild member list (including
+  people who have never used the site) needs the bot to publish one, the way
+  ServerPublisher does for servers.
 - **B3 · Moderate** — kick, ban, timeout a Discord member.
-- **B4 · Announcements** — one composer that can post to Discord and the game at
-  once, so a restart notice is not written twice.
+- **B4 · Announcements** — *next.* Both halves exist now (Broadcast for the game,
+  Discord for the channel); this is one composer over the two.
 - **B5 · Link management** — see and break account links from the panel.
 - **B6 · Ticket/appeal bridge** — if appeals still arrive in Discord, pull them
   into the same queue as the website's.
