@@ -80,7 +80,26 @@ export async function renderBroadcast(root) {
     if (!confirm(`Send this to ${kind === 'staff' ? 'all staff' : 'everyone'} in game?`)) return;
     btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Sending…';
     try {
-      await api.dash.broadcast(kind, message);
+      const res = await api.dash.broadcast(kind, message);
+      // An alert is handed to the core, so it is watched to its end like any
+      // other queued job — "sent" has to mean the core sent it, not that we
+      // wrote a row down.
+      if (res.via === 'alert') {
+        const row = await awaitAlert(res.id, msg);
+        if (row.status === 'done') {
+          msg.className = 'fmsg ok'; msg.textContent = 'Alert sent through the core.';
+          setTimeout(() => renderBroadcast(root), 800);
+        } else if (row.status === 'failed') {
+          msg.className = 'fmsg bad';
+          msg.textContent = `The core refused it: ${row.result || 'no reason given'}`;
+          btn.disabled = false;
+        } else {
+          msg.className = 'fmsg bad';
+          msg.textContent = 'No server picked it up — is one online?';
+          btn.disabled = false;
+        }
+        return;
+      }
       msg.className = 'fmsg ok'; msg.textContent = 'Sent to the network.';
       setTimeout(() => renderBroadcast(root), 800);
     } catch (err) {
@@ -91,6 +110,18 @@ export async function renderBroadcast(root) {
         : err?.body?.error === 'message_required' ? 'Type a message first.' : 'That did not send.';
     }
   });
+}
+
+// The alert rides the same queue a ban does, so it is watched the same way.
+async function awaitAlert(jobId, msg) {
+  for (let i = 0; i < 15; i++) {
+    let row;
+    try { row = await api.dash.action(jobId); } catch { return { status: 'unknown' }; }
+    if (row.status === 'done' || row.status === 'failed') return row;
+    if (msg) msg.textContent = 'Waiting for the core…';
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return { status: 'pending' };
 }
 
 function bcRow(b) {
