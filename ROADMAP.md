@@ -20,6 +20,7 @@ up half-working. They are not interchangeable.
 | **Store-direct** | Mongo | nobody; read at boot | Config Phoenix only *reads* — report menu, chat filters, tags |
 | **Discord queue** | `discord_tasks` | the bot | Roles, and everything Discord-side |
 | *(upward)* | `network_servers` | plugin writes, site reads | Live state the site has no other way to see |
+| **The host** | FeatherPanel API | the panel | The layer *below* Phoenix — power, container console, backups, worlds |
 
 Two rules that fall out of this, both learned the hard way:
 
@@ -52,6 +53,12 @@ config backups with restore.
 
 **Records** — every command run, every line of chat, searchable by player or by
 text; who has signed in; per-person access overrides.
+
+**The host** (FeatherPanel) — every server with its state, memory, disk and node;
+power start/restart/stop/kill; the container's own console; backups taken,
+restored and deleted; worlds; and each box's operators, whitelist and vanilla
+bans. Distinct from Phoenix on purpose: a restart here takes the container away,
+and a ban here is one box's file rather than a punishment on anybody's record.
 
 ---
 
