@@ -138,6 +138,8 @@ export const api = {
     // core's own prefixed alert; 'all' a network-wide announcement.
     broadcast: (kind, message) => send('/dash/broadcast', 'POST', { kind, message }),
     broadcasts: () => get('/dash/broadcasts'),
+    // One line, both halves of the network. Each target answers for itself.
+    announce: (body) => send('/dash/announce', 'POST', body),
 
     // Reaching one player where they are standing.
     playerMessage: (name, message) => send('/dash/player/message', 'POST', { name, message }),

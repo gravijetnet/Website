@@ -39,14 +39,20 @@ export async function renderBroadcast(root) {
       </label>
       <div class="bcprev" id="bcprev"><span class="dr">Preview appears here.</span></div>
       <p class="rule-text re-hint" id="bchint"></p>
+      <div class="re-flags">
+        <label class="re-flag"><input type="checkbox" id="bcgame" checked> In game</label>
+        <label class="re-flag"><input type="checkbox" id="bcdisc"> To Discord</label>
+      </div>
       <div class="prow">
         <select class="fld" id="bckind">
           <option value="all">Everyone — a network-wide announcement</option>
           <option value="staff">Staff alert — the core’s own</option>
         </select>
+        <input class="fld" id="bcchan" list="bcchanpool" placeholder="Discord channel id" autocomplete="off" hidden>
         <button class="btn btn-primary" id="bcsend">Send</button>
         <span class="fmsg" id="bcm"></span>
       </div>
+      <datalist id="bcchanpool"></datalist>
     </div></section>
     <div class="block">
       <div class="block-label">Recently sent</div>
@@ -57,6 +63,30 @@ export async function renderBroadcast(root) {
   const prev = root.querySelector('#bcprev');
   const kindSel = root.querySelector('#bckind');
   const hint = root.querySelector('#bchint');
+  const gameOn = root.querySelector('#bcgame');
+  const discOn = root.querySelector('#bcdisc');
+  const chan = root.querySelector('#bcchan');
+
+  // The channel field only exists when it is relevant, and the known channels
+  // are offered by name so nobody goes hunting for an id in Discord.
+  const syncTargets = () => {
+    kindSel.hidden = !gameOn.checked;
+    chan.hidden = !discOn.checked;
+  };
+  gameOn.addEventListener('change', syncTargets);
+  discOn.addEventListener('change', () => {
+    syncTargets();
+    if (discOn.checked && !chan.dataset.loaded) {
+      chan.dataset.loaded = '1';
+      api.dash.discordChannels()
+        .then(({ channels }) => {
+          root.querySelector('#bcchanpool').innerHTML = (channels || [])
+            .map((c) => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
+        })
+        .catch(() => { /* an id typed by hand still works */ });
+    }
+  });
+  syncTargets();
 
   // A staff alert is prefixed by the core, so the preview shows it prefixed —
   // otherwise you are composing one line and sending another.
@@ -78,6 +108,49 @@ export async function renderBroadcast(root) {
     const message = input.value.trim();
     if (!message) { msg.className = 'fmsg bad'; msg.textContent = 'Type a message first.'; return; }
     const kind = root.querySelector('#bckind').value;
+
+    // Both halves at once, when both are ticked.
+    if (gameOn.checked && discOn.checked) {
+      const channelId = chan.value.trim();
+      if (!channelId) { msg.className = 'fmsg bad'; msg.textContent = 'Which Discord channel?'; return; }
+      if (!await ask({
+        title: 'Send this to the game and to Discord?',
+        body: message,
+        confirmLabel: 'Send both',
+      })) return;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Sending…';
+      try {
+        const out = await api.dash.announce({ message, game: kind, channelId });
+        const bits = [];
+        bits.push(out.game?.ok ? 'game: sent' : `game: ${out.game?.error || 'failed'}`);
+        bits.push(out.discord?.ok ? 'Discord: sent' : `Discord: ${out.discord?.error || 'failed'}`);
+        const allOk = out.game?.ok && out.discord?.ok;
+        msg.className = `fmsg ${allOk ? 'ok' : 'bad'}`;
+        msg.textContent = bits.join(' · ');
+        if (allOk) setTimeout(() => renderBroadcast(root), 900);
+      } catch (err) {
+        msg.className = 'fmsg bad';
+        msg.textContent = err?.body?.error === 'no_target' ? 'Pick at least one place to send it.' : 'That did not send.';
+      } finally { btn.disabled = false; }
+      return;
+    }
+
+    // Discord only.
+    if (discOn.checked && !gameOn.checked) {
+      const channelId = chan.value.trim();
+      if (!channelId) { msg.className = 'fmsg bad'; msg.textContent = 'Which Discord channel?'; return; }
+      if (!await ask({ title: 'Post this to Discord?', body: message, confirmLabel: 'Post' })) return;
+      btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Sending…';
+      try {
+        const out = await api.dash.announce({ message, channelId });
+        msg.className = out.discord?.ok ? 'fmsg ok' : 'fmsg bad';
+        msg.textContent = out.discord?.ok ? 'Posted to Discord.' : `Discord: ${out.discord?.error || 'failed'}`;
+      } catch { msg.className = 'fmsg bad'; msg.textContent = 'That did not send.'; }
+      finally { btn.disabled = false; }
+      return;
+    }
+
+    if (!gameOn.checked) { msg.className = 'fmsg bad'; msg.textContent = 'Pick at least one place to send it.'; return; }
     if (!await ask({
       title: kind === 'staff' ? 'Send this alert to all staff?' : 'Send this to everyone in game?',
       body: message,

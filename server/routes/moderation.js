@@ -331,6 +331,68 @@ router.post('/dash/broadcast', staff.requires('broadcast'), json, async (req, re
   }
 });
 
+// One announcement, both halves of the network.
+//
+// A restart notice was being written twice — once for the game, once for the
+// Discord — which is how the two end up disagreeing about the time. This sends
+// the same line to whichever targets are ticked.
+//
+// Each target reports on its own and neither can fail the other: the game and
+// Discord are different systems with different failure modes, and "it went to
+// Discord but the plugin is not deployed" is a true and useful answer that a
+// single ok/failed could not express.
+router.post('/dash/announce', staff.requires('broadcast'), json, async (req, res) => {
+  const message = String(req.body?.message || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 512);
+  if (!message) return res.status(400).json({ error: 'message_required' });
+
+  const game = req.body?.game === 'all' || req.body?.game === 'staff' ? req.body.game : null;
+  const channelId = String(req.body?.channelId || '').trim();
+  const toDiscord = /^[0-9]{5,32}$/.test(channelId);
+  if (!game && !toDiscord) return res.status(400).json({ error: 'no_target' });
+
+  const out = { game: null, discord: null };
+
+  if (game) {
+    try {
+      const id = game === 'staff'
+        ? await actions.enqueue({
+          action: 'alert', targetUuid: CONSOLE_UUID, reason: message,
+          actorUuid: await actorUuid(req), actorLabel: label(req),
+        })
+        : await broadcasts.enqueue({ kind: 'all', message, actorLabel: label(req) });
+      out.game = { ok: true, id, via: game === 'staff' ? 'alert' : 'broadcast' };
+    } catch (err) {
+      out.game = { ok: false, error: err.code === 'not_installed' ? 'plugin_missing' : 'broadcast_failed' };
+    }
+  }
+
+  if (toDiscord) {
+    try {
+      const payload = req.body?.embed === true || req.body?.embed === 'true'
+        ? JSON.stringify({
+          embed: {
+            title: String(req.body?.title || '').trim().slice(0, 200) || undefined,
+            description: message,
+            color: 0xE6B800,
+          },
+        })
+        : message;
+      const taskId = await discordtasks.enqueue({
+        action: 'channel_message', discordId: channelId, payload, actorLabel: label(req),
+      });
+      out.discord = { ok: true, taskId };
+    } catch (err) {
+      out.discord = { ok: false, error: err.code === 'not_installed' ? 'bot_missing' : 'message_failed' };
+    }
+  }
+
+  await audit.record(req, 'announce', 'network', {
+    message, game, channelId: toDiscord ? channelId : null,
+    gameOk: out.game?.ok ?? null, discordOk: out.discord?.ok ?? null,
+  });
+  res.status(202).json(out);
+});
+
 // --- reaching one player ----------------------------------------------------
 //
 // Both of these are fan-out rows rather than claimed jobs: every server reads
