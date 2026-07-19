@@ -192,6 +192,75 @@ router.get('/dash/panel/servers/:id/players', staff.requires('manageNetwork'), a
   }
 });
 
+// The server's own console output, cleaned of the terminal's cursor games.
+// Newest last, the way a log reads.
+router.get('/dash/panel/servers/:id/logs', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    await assertManaged(req.params.id);
+    const d = await feather.logs(req.params.id);
+    const raw = d?.response?.data || d?.data || [];
+    const lines = (Array.isArray(raw) ? raw : String(raw).split('\n'))
+      .map(feather.cleanLog)
+      .filter((l) => l.length);
+    res.json({ lines: lines.slice(-400) });
+  } catch (err) {
+    return fail(res, err, 'logs');
+  }
+});
+
+// The same log, pushed to mclo.gs, for when somebody else has to read it.
+router.post('/dash/panel/servers/:id/logs/share', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    const server = await assertManaged(req.params.id);
+    const d = await feather.shareLogs(req.params.id);
+    const url = d?.url || d?.link || d?.response?.url || null;
+    await audit.record(req, 'panel.log_share', server.name, { url });
+    res.json({ url });
+  } catch (err) {
+    return fail(res, err, 'log share');
+  }
+});
+
+// Where the server actually is. The port is the thing nobody can ever find.
+router.get('/dash/panel/servers/:id/allocations', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    await assertManaged(req.params.id);
+    const d = await feather.allocations(req.params.id);
+    const ip = d?.node?.public_ip_v4 || null;
+    res.json({
+      allocations: (d?.allocations || []).map((a) => ({
+        ip: a.ip || ip,
+        alias: a.ip_alias || null,
+        port: a.port,
+        primary: !!a.is_primary || !!a.primary,
+        notes: a.notes || null,
+      })),
+    });
+  } catch (err) {
+    return fail(res, err, 'allocations');
+  }
+});
+
+// What the *panel* recorded. Deliberately separate from our own audit: somebody
+// pressing stop in the panel itself never touches Spielplatz, and this is the
+// only place that would show it.
+router.get('/dash/panel/servers/:id/activities', staff.requires('manageNetwork'), async (req, res) => {
+  try {
+    await assertManaged(req.params.id);
+    const d = await feather.activities(req.params.id);
+    const list = d?.activities?.data || d?.data || [];
+    res.json({
+      activities: list.slice(0, 60).map((a) => ({
+        event: a.event,
+        ip: a.ip || null,
+        at: a.created_at || a.timestamp || null,
+      })),
+    });
+  } catch (err) {
+    return fail(res, err, 'activities');
+  }
+});
+
 // --- acting -----------------------------------------------------------------
 
 // Power and the container console are the two things here that can take the

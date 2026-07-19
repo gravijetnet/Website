@@ -1256,3 +1256,15 @@ textarea.fld.mono { line-height: 1.45; }
 .meter-bar span.warm { background: var(--mc-gold); }
 .meter-bar span.hot { background: var(--mc-red); }
 .meter-note { margin-top: 10px; }
+
+/* A console log is read as a block of monospace, newest last, scrolled inside
+   its own box rather than making the whole page a mile long. */
+.logbox {
+  max-height: 380px; overflow: auto; padding: 10px; margin-bottom: 10px;
+  background: #000; border: 2px solid var(--slot-lo);
+}
+.logline {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 14px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+  color: var(--mc-gray);
+}

@@ -184,6 +184,16 @@ function serverCard(s, can) {
             : ''
         }
 
+        <details class="block card-roll" data-lazy="console">
+          <summary class="card-sum"><span class="cs-name">Console log</span><span class="cs-meta">open to load</span></summary>
+          <div data-slot>${pageLoader()}</div>
+        </details>
+
+        <details class="block card-roll" data-lazy="ports">
+          <summary class="card-sum"><span class="cs-name">Address and ports</span><span class="cs-meta">open to load</span></summary>
+          <div data-slot>${pageLoader()}</div>
+        </details>
+
         <details class="block card-roll" data-lazy="backups">
           <summary class="card-sum"><span class="cs-name">Backups</span><span class="cs-meta">open to load</span></summary>
           <div data-slot>${pageLoader()}</div>
@@ -196,6 +206,11 @@ function serverCard(s, can) {
 
         <details class="block card-roll" data-lazy="players">
           <summary class="card-sum"><span class="cs-name">Ops, whitelist and this box’s own bans</span><span class="cs-meta">open to load</span></summary>
+          <div data-slot>${pageLoader()}</div>
+        </details>
+
+        <details class="block card-roll" data-lazy="activity">
+          <summary class="card-sum"><span class="cs-name">What the panel recorded</span><span class="cs-meta">open to load</span></summary>
           <div data-slot>${pageLoader()}</div>
         </details>
       </div>
@@ -230,6 +245,43 @@ function backupsPane(d, can) {
       <button class="btn" data-newbackup>Take a backup</button>
       <span class="fmsg" data-bmsg></span>
     </div>`;
+}
+
+// The container's own output. Newest last, because that is how a log reads and
+// scrolling to the bottom is a gesture everybody already has.
+function consolePane(d) {
+  if (!d.lines.length) return '<div class="board"><div class="empty">The log is empty.</div></div>';
+  return `
+    <div class="logbox">${d.lines.map((l) => `<div class="logline">${esc(l)}</div>`).join('')}</div>
+    <div class="factions">
+      <button class="btn" data-reloadlog>Reload</button>
+      <button class="btn" data-sharelog>Share to mclo.gs</button>
+      <span class="fmsg" data-logmsg></span>
+    </div>`;
+}
+
+function portsPane(d) {
+  if (!d.allocations.length) return '<div class="board"><div class="empty">No address on record.</div></div>';
+  return `<div class="board">${d.allocations
+    .map((a) => `
+      <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+        <div><div class="dn mono">${esc(a.ip)}:${esc(String(a.port))}</div><div class="dr">${esc(a.alias || '')}${a.notes ? ` · ${esc(a.notes)}` : ''}</div></div>
+        <div class="dr">${a.primary ? 'primary' : ''}</div>
+      </div>`)
+    .join('')}</div>`;
+}
+
+// The panel's own record, which is not ours. Somebody pressing stop in the panel
+// never touches Spielplatz's audit, and this is the only place it shows.
+function activityPane(d) {
+  if (!d.activities.length) return '<div class="board"><div class="empty">Nothing recorded.</div></div>';
+  return `<div class="board">${d.activities
+    .map((a) => `
+      <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+        <div><div class="dn mono">${esc(a.event)}</div><div class="dr">${esc(a.ip || '')}</div></div>
+        <div class="dr">${a.at ? esc(dateShort(a.at)) : ''}</div>
+      </div>`)
+    .join('')}</div>`;
 }
 
 function worldsPane(d) {
@@ -336,7 +388,14 @@ function wirePanel(root, can) {
         loaded = true;
         const what = box.dataset.lazy;
         try {
-          if (what === 'backups') {
+          if (what === 'console') {
+            slot.innerHTML = consolePane(await api.dash.panelLogs(id));
+            wireConsole(slot, id);
+          } else if (what === 'ports') {
+            slot.innerHTML = portsPane(await api.dash.panelAllocations(id));
+          } else if (what === 'activity') {
+            slot.innerHTML = activityPane(await api.dash.panelActivities(id));
+          } else if (what === 'backups') {
             slot.innerHTML = backupsPane(await api.dash.panelBackups(id), can);
             wireBackups(slot, id, can);
           } else if (what === 'worlds') {
@@ -350,6 +409,36 @@ function wirePanel(root, can) {
         }
       });
     });
+  });
+}
+
+function wireConsole(slot, id) {
+  const msg = slot.querySelector('[data-logmsg]');
+
+  slot.querySelector('[data-reloadlog]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const d = await api.dash.panelLogs(id);
+      slot.innerHTML = consolePane(d);
+      wireConsole(slot, id);
+    } catch (err) { msg.className = 'fmsg bad'; msg.textContent = panelErr(err); btn.disabled = false; }
+  });
+
+  slot.querySelector('[data-sharelog]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; msg.className = 'fmsg'; msg.textContent = 'Uploading…';
+    try {
+      const { url } = await api.dash.panelShareLogs(id);
+      if (url) {
+        msg.className = 'fmsg ok';
+        msg.innerHTML = `<a href="${esc(url)}" target="_blank" rel="noopener" data-ext>${esc(url)}</a>`;
+      } else {
+        msg.className = 'fmsg';
+        msg.textContent = 'Uploaded, but the panel returned no link.';
+      }
+    } catch (err) { msg.className = 'fmsg bad'; msg.textContent = panelErr(err); }
+    finally { btn.disabled = false; }
   });
 }
 

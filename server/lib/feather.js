@@ -99,6 +99,37 @@ const deleteBackup = (id, backupId) =>
 const worlds = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/worlds`);
 const players = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/addons/mcutils/playermanager`);
 
+// The server's own console output. Wings hands these back as terminal lines,
+// escape codes and all — the panel is a terminal, we are a web page.
+const logs = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/logs`);
+
+// Push the log to mclo.gs and get a link. The thing you actually want when a
+// server is misbehaving and somebody else has to look at it.
+const shareLogs = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/logs/upload`, { method: 'POST' });
+
+// What the panel itself recorded against this server — separate from our audit,
+// because somebody pressing stop *in the panel* never touches Spielplatz.
+const activities = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/activities`);
+
+// Where the server actually is: address and port. Surprisingly hard to find when
+// you need it and trivially answered here.
+const allocations = (id) => call(`/api/user/servers/${encodeURIComponent(id)}/allocations`);
+
+// Terminal output rendered by a browser. Strips the cursor games Wings sends —
+// carriage returns, erase-to-end-of-line, colour — which would otherwise show up
+// as literal gibberish in the middle of every progress line.
+function cleanLog(line) {
+  return String(line)
+    // CSI sequences: colour, erase-to-end-of-line, cursor moves. Wings is
+    // talking to a terminal; this is a web page.
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1B\[[0-9;?]*[ -/]*[@-~]/g, '')
+    // Anything else non-printable, the tab excepted.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '')
+    .trimEnd();
+}
+
 // What the machine underneath is actually doing — memory and disk in use against
 // what exists, the load average, the real CPU percentage. The per-server figures
 // the panel hands out are *allocations*, which is a budget rather than a
@@ -113,4 +144,5 @@ module.exports = {
   configured, call, servers, server, power, command,
   backups, createBackup, restoreBackup, deleteBackup,
   worlds, players, nodeStatus, allocation, POWER, FeatherError,
+  logs, shareLogs, activities, allocations, cleanLog,
 };
