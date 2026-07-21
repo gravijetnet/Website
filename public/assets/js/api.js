@@ -15,6 +15,37 @@ async function get(path) {
   return res.json();
 }
 
+// Who the browser is, and what they may do — memoised.
+//
+// This is the one call every surface makes before it paints: the shell asks it
+// to draw the header, and the console and the player dashboard both ask it again
+// to know which page to draw. Left unmemoised that is two round trips on a cold
+// load and one more on every single tab switch, all of them blocking the page
+// behind them — which is most of why the console felt slow to move around in.
+//
+// The answer barely changes: the server re-reads Discord roles on a five-minute
+// window, so a browser holding one for a minute is never meaningfully wrong. The
+// in-flight promise is cached, not just the result, so the header and the body
+// firing at the same instant on a cold load share the single request rather than
+// racing two. `forgetMe` drops it when something we did could have changed it.
+let meCache = null; // { at, promise }
+const ME_TTL = 60000;
+function me() {
+  const now = Date.now();
+  if (meCache && now - meCache.at < ME_TTL) return meCache.promise;
+  const promise = get('/me').catch((err) => {
+    // A failed lookup must not stick: the next caller should get a fresh try,
+    // not a cached rejection for the rest of the minute.
+    if (meCache && meCache.promise === promise) meCache = null;
+    throw err;
+  });
+  meCache = { at: now, promise };
+  return promise;
+}
+function forgetMe() {
+  meCache = null;
+}
+
 async function send(path, method, body) {
   const res = await fetch(`/api${path}`, {
     method,
@@ -35,7 +66,8 @@ async function send(path, method, body) {
 
 export const api = {
   network: () => get('/network'),
-  me: () => get('/me'),
+  me,
+  forgetMe,
   logout: () => send('/auth/logout', 'POST'),
 
   applyRoles: () => get('/apply'),

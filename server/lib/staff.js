@@ -2,6 +2,7 @@
 
 const config = require('../config');
 const mongo = require('./mongo');
+const { cached } = require('./cache');
 
 // What a signed-in person is allowed to do, decided by the Discord roles they
 // hold in the Gravijet guild.
@@ -172,9 +173,17 @@ async function fetchRoles(accessToken) {
 // routes/access.js rather than here: you cannot override somebody whose tier is
 // at or above your own, and you cannot deny yourself out of manageAccess (which
 // would lock the door from the inside with the key still in it).
+// Cached, keyed per person, because context() runs on every guarded request —
+// each page a moderator opens fires a handful — and this was a fresh findOne
+// each time for a document that changes only when an Admin edits the access
+// list. The window is short and the access editor busts the key on save (see
+// routes/admin), so an override still takes effect at once for the person who
+// made it, not in thirty seconds. `access.set` in routes/admin.js is where the
+// bust lives; keep the key shape (`override:<id>`) in step with it.
 async function overrideFor(discordId) {
   try {
-    return await (await mongo.site.access()).findOne({ _id: discordId });
+    return await cached(`override:${discordId}`, 30000, async () =>
+      (await mongo.site.access()).findOne({ _id: discordId }));
   } catch {
     // A store that will not answer must not silently widen anyone's access, and
     // must not silently narrow it either. The ladder alone is the safe answer.

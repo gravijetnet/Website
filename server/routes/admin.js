@@ -222,6 +222,11 @@ router.put('/dash/access/:discordId', staff.requires('manageAccess'), json, asyn
       return res.status(400).json({ error: 'cannot_lock_yourself_out' });
     }
 
+    // The permission check caches each person's override for half a minute
+    // (lib/staff.overrideFor); drop this one so the change is in force on their
+    // very next request rather than at the end of the window.
+    require('../lib/cache').bust(`override:${target}`);
+
     if (!grant.length && !deny.length) {
       await (await mongo.site.access()).deleteOne({ _id: target });
       await audit.record(req, 'access.clear', target, { name: them?.name || null });
