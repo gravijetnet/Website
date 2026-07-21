@@ -1336,7 +1336,12 @@ textarea.fld.mono { line-height: 1.45; }
 /* The watch screen: two panes, chat filling from the bottom on the left and a
    pulse of everything else on the right. Both are monospace blocks over black —
    they are logs that move, and a log is read in a fixed column. */
-.live-ctl { display: flex; align-items: center; gap: 8px; }
+.live-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.live-tog {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 14px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; white-space: nowrap;
+}
+.live-tog input { accent-color: var(--mc-green); }
 .live-beat {
   display: inline-block; width: 9px; height: 9px; margin-right: 9px; vertical-align: middle;
   background: var(--mc-green); border: 1px solid #0a3f0a;
@@ -1358,6 +1363,13 @@ textarea.fld.mono { line-height: 1.45; }
   height: 62vh; min-height: 320px; overflow-y: auto; padding: 8px 10px; background: #000;
 }
 .live-empty { padding: 22px 10px; font-size: 15px; color: var(--mc-dark-gray); }
+/* Flagged-only keeps the flagged lines and hides the calm ones — the backlog is
+   untouched, just not drawn. */
+.livechat.flagged-only .lc-line:not(.flagged) { display: none; }
+/* The flash when a filter trips: a red wash across the chat pane that fades on
+   its own, so a moderator whose eyes were elsewhere sees that something landed. */
+.livechat.flagflash { animation: flagflash 0.7s ease-out; }
+@keyframes flagflash { 0% { box-shadow: inset 0 0 0 2px var(--mc-red); background: rgba(170, 0, 0, 0.22); } 100% { box-shadow: none; background: #000; } }
 
 /* Chat: time, name, line — a fixed grid so names align down the left of the
    messages the way they do in game. A flagged line wears a red edge and the

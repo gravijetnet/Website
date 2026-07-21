@@ -14,6 +14,7 @@ import { api } from './api.js';
 import { esc, timeAgo } from './util.js';
 import { pageLoader, notice } from './components.js';
 import { icons } from './icons.js';
+import { sound } from './sound.js';
 
 const CHAT_EVERY = 3000;
 const PULSE_EVERY = 4000;
@@ -118,7 +119,9 @@ export async function renderLive(root) {
         <p>Network chat and everything moving, as it happens. Leave it open.</p>
       </div>
       <div class="live-ctl">
-        <input class="fld fld-inline" id="lchi" placeholder="Highlight a word" autocomplete="off" spellcheck="false" style="max-width:180px">
+        <input class="fld fld-inline" id="lchi" placeholder="Highlight a word" autocomplete="off" spellcheck="false" style="max-width:160px">
+        <label class="live-tog" title="Hide everything but lines that trip a filter"><input type="checkbox" id="lflag"> Flagged only</label>
+        <label class="live-tog" title="A sound when a filter trips while you watch"><input type="checkbox" id="lalert"> Alert</label>
         <button class="btn" id="lpause" title="Stop and start the feed">Pause</button>
       </div>
     </div>
@@ -137,6 +140,8 @@ export async function renderLive(root) {
   const pulseBox = root.querySelector('#livepulse');
   const hiIn = root.querySelector('#lchi');
   const pauseBtn = root.querySelector('#lpause');
+  const flagOnly = root.querySelector('#lflag');
+  const alertOn = root.querySelector('#lalert');
   const dot = root.querySelector('#livedot');
   const chatStat = root.querySelector('#chatstat');
 
@@ -153,14 +158,24 @@ export async function renderLive(root) {
   const paintChat = (lines, initial) => {
     if (!lines.length) return;
     const stick = atBottom();
+    let freshFlags = 0;
     for (const l of lines) {
       if (l.at > chatSince) chatSince = l.at;
-      if (l.flag) flagged++;
+      if (l.flag) { flagged++; freshFlags++; }
       chatBox.insertAdjacentHTML('beforeend', chatLine(l, term));
     }
     while (chatBox.children.length > CHAT_KEEP) chatBox.firstElementChild.remove();
     if (stick || initial) chatBox.scrollTop = chatBox.scrollHeight;
     chatStat.textContent = flagged ? `${flagged} flagged` : '';
+    // A filter tripping while you watch is the one thing worth pulling your eyes
+    // over — a sound if you asked for one, and a flash either way. Never on the
+    // first fill, which is history, not something that just happened.
+    if (!initial && freshFlags) {
+      chatBox.classList.remove('flagflash');
+      void chatBox.offsetWidth; // restart the animation even on back-to-back flags
+      chatBox.classList.add('flagflash');
+      if (alertOn.checked) sound.click();
+    }
   };
 
   const paintPulse = (events, initial) => {
@@ -224,6 +239,13 @@ export async function renderLive(root) {
       const raw = el.textContent;
       el.innerHTML = highlight(raw, term);
     });
+  });
+
+  // Flagged-only hides the calm lines rather than dropping them — untick and the
+  // backlog is all still there. The state lives on the box, so it applies to
+  // what is already on screen and to everything that arrives after.
+  flagOnly.addEventListener('change', () => {
+    chatBox.classList.toggle('flagged-only', flagOnly.checked);
   });
 
   pauseBtn.addEventListener('click', () => {
