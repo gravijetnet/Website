@@ -1440,3 +1440,11 @@ a.dn:hover { text-decoration: underline; }
 .act-bar span { display: block; height: 100%; background: var(--mc-green); }
 .act-when { white-space: nowrap; align-self: center; }
 .act-dark { font-size: 12px; color: var(--mc-gold); border: 1px solid #3f2a00; padding: 0 5px; text-shadow: 1px 1px 0 #000; }
+
+/* A report's inline chat evidence: the accused's own recent lines, in a small
+   scrolling block so a chatty player does not push the decision buttons off the
+   bottom of the card. */
+.rep-chatlog { max-height: 220px; overflow-y: auto; background: #000; border: 2px solid var(--slot-lo); padding: 6px 8px; }
+.rep-line { font-size: 15px; line-height: 1.5; padding: 1px 0; }
+.rep-line .dr { margin-right: 6px; }
+.rep-msg { color: var(--mc-white); text-shadow: 1px 1px 0 #000; }

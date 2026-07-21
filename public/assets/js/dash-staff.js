@@ -451,6 +451,9 @@ async function paintReports(body, can) {
           <div class="ph-sub">by ${esc(r.discordName)}${r.status === 'closed' ? ` · ${esc(r.outcome)} by ${esc(r.resolvedBy?.name || 'unknown')}` : ''}</div>
           <p class="rule-text">${esc(r.detail)}</p>
           ${r.evidence ? `<div class="block"><div class="block-label">Evidence</div><a href="${esc(r.evidence)}" target="_blank" rel="noopener nofollow" data-ext>${esc(r.evidence)}</a></div>` : ''}
+          <div class="block"><div class="block-label">What they have been saying</div>
+            <div class="rep-chat" data-chat="${esc(r.target.name)}">${pageLoader()}</div>
+          </div>
           <a class="btn" href="/players?q=${encodeURIComponent(r.target.name)}">Look up ${esc(r.target.name)}</a>
           ${
             can.resolveReports && r.status === 'open'
@@ -469,6 +472,25 @@ async function paintReports(body, can) {
         : empty(status === '' ? 'No open reports.' : 'Nothing here.')
     }</div>`;
 
+  // The accused's own recent chat, pulled in only when the report is opened —
+  // the report claims they said something, and this is where you read whether
+  // they did without leaving for the logs and searching by hand.
+  body.querySelectorAll('.card-roll').forEach((card) => {
+    let loaded = false;
+    card.addEventListener('toggle', async () => {
+      if (!card.open || loaded) return;
+      loaded = true;
+      const box = card.querySelector('.rep-chat');
+      if (!box) return;
+      try {
+        const { logs } = await api.dash.chatLogs(box.dataset.chat, 40);
+        box.innerHTML = reportChat(logs, box.dataset.chat);
+      } catch {
+        box.innerHTML = '<div class="empty">Their chat could not be read.</div>';
+      }
+    });
+  });
+
   body.querySelectorAll('[data-act]').forEach((btn) =>
     btn.addEventListener('click', async () => {
       const panel = btn.closest('.panel');
@@ -484,6 +506,21 @@ async function paintReports(body, can) {
       }
     }),
   );
+}
+
+// The accused's own lines, newest last so they read in the order they were
+// typed. The log search also matches lines that merely mention the name, so it
+// is narrowed to lines they actually sent — "what they have been saying" has to
+// mean them. A quiet player with nothing recent is said plainly rather than left
+// blank: "nothing on record" is itself evidence when a report claims abuse.
+function reportChat(logs, name) {
+  const want = String(name || '').toLowerCase();
+  const own = (logs || []).filter((l) => (l.by || '').toLowerCase() === want);
+  const lines = own.slice().sort((a, b) => (a.at || 0) - (b.at || 0));
+  if (!lines.length) return '<div class="empty">Nothing they have said is on record.</div>';
+  return `<div class="rep-chatlog">${lines
+    .map((l) => `<div class="rep-line"><span class="dr">${esc(dateShort(l.at))}</span> <span class="rep-msg">${esc(l.message)}</span></div>`)
+    .join('')}</div>`;
 }
 
 // --- appeals ---------------------------------------------------------------
