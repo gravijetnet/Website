@@ -496,7 +496,7 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
       loginCol.find({ target: identity.uuid }).sort({ login: -1 }).limit(60).toArray(),
       profileCol.findOne(
         { _id: identity.uuid },
-        { projection: { alts: 1, siblings: 1, notes: 1 } },
+        { projection: { alts: 1, siblings: 1, notes: 1, authType: 1, twoFactor: 1, disguiseData: 1, tagName: 1, customTag: 1 } },
       ),
     ]);
 
@@ -559,9 +559,22 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
       .limit(20)
       .toArray();
 
+    // Who the account is and how it is secured, as the core knows it. A disguise
+    // is the one a moderator has to see: a nicked player shows up in game as
+    // somebody else, and "who is this really" is exactly the question the dossier
+    // is open to answer.
+    const disguise = profile?.disguiseData?.disguiseName || null;
+    const dossierIdentity = {
+      authType: profile?.authType || null,
+      twoFactor: !!profile?.twoFactor,
+      tag: profile?.customTag || profile?.tagName || null,
+      disguisedAs: disguise,
+    };
+
     res.json({
       name: identity.name,
       uuid: identity.uuid,
+      identity: dossierIdentity,
       logins: logins.map((l) => ({
         ip: l.ip || null,
         login: Number(l.login) || null,

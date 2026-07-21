@@ -1002,12 +1002,28 @@ function connectionWhy(s) {
   return bits.join(' · ') || 'linked';
 }
 
+// The identity chips: how the account signs in, whether it carries 2FA, its
+// cosmetic tag, and — loudest — whether it is disguised as someone else right
+// now. Only the facts that are true are shown; an account with nothing notable
+// gets no block rather than a row of "no"s.
+function identityChips(id) {
+  if (!id) return '';
+  const chips = [];
+  if (id.disguisedAs) chips.push(`<span class="permchip id-chip id-disguise">disguised as ${esc(id.disguisedAs)}</span>`);
+  if (id.authType) chips.push(`<span class="permchip id-chip id-auth">${esc(id.authType)} login</span>`);
+  if (id.twoFactor) chips.push('<span class="permchip id-chip id-2fa">2FA on</span>');
+  if (id.tag) chips.push(`<span class="permchip id-chip">tag: ${esc(id.tag)}</span>`);
+  if (!chips.length) return '';
+  return `<div class="block"><div class="block-label">Identity</div><div class="altrow">${chips.join('')}</div></div>`;
+}
+
 function dossierBody(d) {
   const logins = d.logins.filter((l) => l.login);
   const connections = d.connections || d.sharedWith || []; // sharedWith: older shape
   const banned = connections.filter((c) => c.restriction).length;
   const notes = d.notes || [];
   return `
+    ${identityChips(d.identity)}
     ${
       notes.length
         ? `<div class="block">

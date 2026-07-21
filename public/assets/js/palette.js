@@ -76,7 +76,7 @@ function recents() {
 function remember(entry) {
   if (!entry?.href) return;
   const list = recents().filter((r) => r.href !== entry.href);
-  list.unshift({ label: entry.label, hint: entry.hint || '', href: entry.href, icon: entry.iconKey || 'arrow' });
+  list.unshift({ label: entry.label, hint: entry.hint || '', href: entry.href, icon: entry.iconKey || entry.icon || 'arrow' });
   try {
     localStorage.setItem('gj.palette.recent', JSON.stringify(list.slice(0, 8)));
   } catch { /* private mode: recents are a nicety, not load-bearing */ }

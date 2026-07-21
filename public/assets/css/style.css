@@ -1448,3 +1448,10 @@ a.dn:hover { text-decoration: underline; }
 .rep-line { font-size: 15px; line-height: 1.5; padding: 1px 0; }
 .rep-line .dr { margin-right: 6px; }
 .rep-msg { color: var(--mc-white); text-shadow: 1px 1px 0 #000; }
+
+/* Dossier identity chips. Disguise is the alarm — a nicked player is somebody
+   else in game — so it wears the warning colour; the rest are quiet facts. */
+.id-chip { font-size: 13px; }
+.id-disguise { color: var(--mc-gold); border-color: #3f2a00; }
+.id-auth { color: var(--mc-aqua); border-color: #153f3f; }
+.id-2fa { color: var(--mc-green); border-color: #153f15; }
