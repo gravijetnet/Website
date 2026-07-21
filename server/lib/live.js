@@ -158,4 +158,4 @@ async function pulse(since, limit) {
   }));
 }
 
-module.exports = { resolveIdentities, chatFeed, pulse };
+module.exports = { resolveIdentities, chatFeed, pulse, MOD_CMD };

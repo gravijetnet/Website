@@ -83,6 +83,7 @@ export const STAFF_TABS = [
   { key: 'users', label: 'Users', need: 'viewPlayers' },
   { key: 'live', label: 'Live', need: 'viewReports' },
   { key: 'logs', label: 'Logs', need: 'viewReports' },
+  { key: 'activity', label: 'Team activity', need: 'viewReports' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
   // A hub, not a page — see NETWORK_PAGES. Shown to anybody who can reach at
   // least one thing inside it.
@@ -137,6 +138,7 @@ export const CONSOLE_NAV = [
     group: 'The record',
     items: [
       { path: '/logs', label: 'Logs', need: 'viewReports' },
+      { path: '/activity', label: 'Team activity', need: 'viewReports' },
       { path: '/audit', label: 'Audit', need: 'viewReports' },
     ],
   },

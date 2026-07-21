@@ -139,6 +139,9 @@ export const api = {
     chatFeed: (since, limit) => get(`/dash/feed/chat?since=${since || 0}&limit=${limit || 60}`),
     pulse: (since, limit) => get(`/dash/pulse?since=${since || 0}&limit=${limit || 40}`),
 
+    // Who on the team has been moderating, and how much (routes/admin).
+    staffActivity: () => get('/dash/staff-activity'),
+
     // Announcements to the game (routes/moderation). kind 'staff' becomes the
     // core's own prefixed alert; 'all' a network-wide announcement.
     broadcast: (kind, message) => send('/dash/broadcast', 'POST', { kind, message }),

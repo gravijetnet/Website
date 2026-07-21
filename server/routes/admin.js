@@ -12,6 +12,9 @@ const configActions = require('../lib/config-actions');
 const backups = require('../lib/backups');
 const links = require('../lib/links');
 const sql = require('../lib/sql');
+const phoenix = require('../lib/phoenix');
+const live = require('../lib/live');
+const { cached } = require('../lib/cache');
 const { ObjectId } = require('mongodb');
 
 // The things Admin and above can change about the network itself, rather than
@@ -1082,6 +1085,69 @@ router.get('/dash/logs/chat', staff.requires('viewReports'), async (req, res) =>
   } catch (err) {
     console.error('[dash chat logs]', err);
     res.status(500).json({ error: 'logs_unavailable' });
+  }
+});
+
+// --- staff accountability ---------------------------------------------------
+//
+// The logs answer "what happened"; this answers "who has been doing the
+// happening". For each staff member: the punishments they have handed out,
+// broken down by kind, and the moderation commands they have run, with when they
+// were last active. It is the owner's view of the team — drawn from the same two
+// logs the rest of this file reads, aggregated in the database rather than
+// pulled into memory. Commands are counted through the same moderation filter
+// the pulse uses, so a builder's ten thousand /setblock do not read as ten
+// thousand moderation actions.
+router.get('/dash/staff-activity', staff.requires('viewReports'), async (req, res) => {
+  try {
+    const roster = await cached('roster', 60000, phoenix.roster).catch(() => []);
+    const team = roster.filter((p) => p.top?.staff);
+    const uuids = team.map((p) => p.uuid);
+    if (!uuids.length) return res.json({ staff: [] });
+
+    const [punAgg, cmdAgg] = await Promise.all([
+      (await mongo.phoenix.punishments()).aggregate([
+        { $match: { issuedBy: { $in: uuids } } },
+        { $group: { _id: { by: '$issuedBy', type: '$punishmentType' }, n: { $sum: 1 }, last: { $max: '$issuedAt' } } },
+      ]).toArray(),
+      (await mongo.phoenix.commandLogs()).aggregate([
+        { $match: { issuedBy: { $in: uuids }, command: { $regex: live.MOD_CMD.source, $options: 'i' } } },
+        { $group: { _id: '$issuedBy', n: { $sum: 1 }, last: { $max: '$issuedOn' } } },
+      ]).toArray(),
+    ]);
+
+    const byUuid = new Map(team.map((p) => [p.uuid, {
+      uuid: p.uuid,
+      name: p.name,
+      rank: p.top?.name || null,
+      color: p.top?.color || '#AAAAAA',
+      punishments: 0,
+      byType: {},
+      commands: 0,
+      lastAt: 0,
+    }]));
+    for (const row of punAgg) {
+      const e = byUuid.get(row._id.by);
+      if (!e) continue;
+      const type = String(row._id.type || 'OTHER').toUpperCase();
+      e.byType[type] = (e.byType[type] || 0) + row.n;
+      e.punishments += row.n;
+      e.lastAt = Math.max(e.lastAt, Number(row.last) || 0);
+    }
+    for (const row of cmdAgg) {
+      const e = byUuid.get(row._id);
+      if (!e) continue;
+      e.commands += row.n;
+      e.lastAt = Math.max(e.lastAt, Number(row.last) || 0);
+    }
+
+    const list = [...byUuid.values()]
+      .map((e) => ({ ...e, lastAt: e.lastAt || null }))
+      .sort((a, b) => (b.punishments + b.commands) - (a.punishments + a.commands) || (b.lastAt || 0) - (a.lastAt || 0));
+    res.json({ staff: list });
+  } catch (err) {
+    console.error('[dash staff activity]', err);
+    res.status(500).json({ error: 'activity_unavailable' });
   }
 });
 
