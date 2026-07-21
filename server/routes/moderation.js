@@ -490,11 +490,15 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
     if (!identity) return res.status(404).json({ error: 'unknown_player' });
 
     const loginCol = await mongo.phoenix.logins();
-    const logins = await loginCol
-      .find({ target: identity.uuid })
-      .sort({ login: -1 })
-      .limit(60)
-      .toArray();
+    const profileCol = await mongo.phoenix.profiles();
+
+    const [logins, profile] = await Promise.all([
+      loginCol.find({ target: identity.uuid }).sort({ login: -1 }).limit(60).toArray(),
+      profileCol.findOne(
+        { _id: identity.uuid },
+        { projection: { alts: 1, siblings: 1, notes: 1 } },
+      ),
+    ]);
 
     const addresses = [...new Set(logins.map((l) => l.ip).filter(Boolean))];
 
@@ -506,18 +510,48 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
         .toArray()
       : [];
 
+    // A connected account is one the core has already tied to this player
+    // (alts/siblings) or one that has shared an address with them. The two are
+    // different kinds of evidence — the core's link is a decision, a shared
+    // address is a coincidence that might be a household — so the source is kept
+    // rather than flattened, and the record says which it is.
     const byUuid = new Map();
-    for (const row of shared) {
-      const entry = byUuid.get(row.target) || { uuid: row.target, addresses: new Set() };
-      entry.addresses.add(row.ip);
-      byUuid.set(row.target, entry);
-    }
-    const profiles = byUuid.size
-      ? await (await mongo.phoenix.profiles())
-        .find({ _id: { $in: [...byUuid.keys()] } }, { projection: { name: 1 } })
-        .toArray()
-      : [];
+    const connect = (uuid, source) => {
+      if (!uuid || uuid === identity.uuid) return null;
+      const entry = byUuid.get(uuid) || { uuid, addresses: new Set(), sources: new Set() };
+      entry.sources.add(source);
+      byUuid.set(uuid, entry);
+      return entry;
+    };
+    for (const row of shared) connect(row.target, 'address')?.addresses.add(row.ip);
+    for (const uuid of profile?.alts || []) connect(uuid, 'alt');
+    for (const uuid of profile?.siblings || []) connect(uuid, 'sibling');
+
+    const connectedIds = [...byUuid.keys()];
+    const [profiles, livePunishments] = await Promise.all([
+      connectedIds.length
+        ? profileCol.find({ _id: { $in: connectedIds } }, { projection: { name: 1 } }).toArray()
+        : [],
+      // The one thing that turns a list of linked names into a ban-evasion
+      // lead: which of them is under a restriction right now. Only the live
+      // ones matter here, so the same isLive the rest of the site uses decides.
+      connectedIds.length
+        ? (await mongo.phoenix.punishments())
+          .find({ ...punishments.LIVE_QUERY, target: { $in: connectedIds } })
+          .toArray()
+        : [],
+    ]);
     const nameOf = new Map(profiles.map((p) => [p._id, p.name]));
+    const now = Date.now();
+    const restrictionOf = new Map();
+    for (const p of livePunishments) {
+      if (!punishments.isLive(p, now)) continue;
+      // A player can hold a live mute and a live ban at once; the ban is the one
+      // worth showing, so a stronger type never loses to a weaker one already set.
+      const cur = restrictionOf.get(p.target);
+      const type = String(p.punishmentType || '').toUpperCase();
+      if (!cur || type === 'BAN' || type === 'BLACKLIST') restrictionOf.set(p.target, type);
+    }
 
     const snapshots = await (await mongo.phoenix.chatSnapshots())
       .find({ 'chat.uuid': identity.uuid }, { projection: { niceId: 1, createdOn: 1, requestedBy: 1 } })
@@ -534,10 +568,33 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
         logout: Number(l.logout) || null,
       })),
       addresses,
-      sharedWith: [...byUuid.values()]
-        .map((e) => ({ uuid: e.uuid, name: nameOf.get(e.uuid) || null, addresses: [...e.addresses] }))
+      // Staff notes the core keeps on the profile, newest first. Shape varies by
+      // core version, so each is reduced to text + who + when as best it can be.
+      notes: (profile?.notes || [])
+        .map((n) => ({
+          text: typeof n === 'string' ? n : (n.note || n.text || n.message || ''),
+          by: n && typeof n === 'object' ? (n.author || n.by || n.staff || null) : null,
+          at: n && typeof n === 'object' ? (Number(n.createdOn || n.at || n.time) || null) : null,
+        }))
+        .filter((n) => n.text)
+        .reverse(),
+      connections: [...byUuid.values()]
+        .map((e) => ({
+          uuid: e.uuid,
+          name: nameOf.get(e.uuid) || null,
+          addresses: [...e.addresses],
+          sources: [...e.sources],
+          restriction: restrictionOf.get(e.uuid) || null,
+        }))
         .filter((e) => e.name)
-        .sort((a, b) => b.addresses.length - a.addresses.length),
+        .sort((a, b) => {
+          // Banned links first — they are the reason to open this at all — then
+          // core-linked over merely address-sharing, then by how many addresses.
+          if (!!a.restriction !== !!b.restriction) return a.restriction ? -1 : 1;
+          const rank = (s) => (s.sources.includes('alt') || s.sources.includes('sibling') ? 1 : 0);
+          if (rank(a) !== rank(b)) return rank(b) - rank(a);
+          return b.addresses.length - a.addresses.length;
+        }),
       snapshots: snapshots.map((s) => ({
         id: s.niceId || String(s._id),
         at: Number(s.createdOn) || null,

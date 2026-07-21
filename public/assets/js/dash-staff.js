@@ -952,9 +952,38 @@ function wireDossier(card, p) {
   });
 }
 
+// How an account is tied to the one being looked at, said in plain words. The
+// core's own link (alt/sibling) is a decision it made; a shared address is a
+// coincidence. Both are shown, labelled for what they are.
+function connectionWhy(s) {
+  const bits = [];
+  if (s.sources.includes('alt')) bits.push('known alt');
+  else if (s.sources.includes('sibling')) bits.push('linked by the core');
+  if (s.addresses.length) bits.push(`${s.addresses.length} address${s.addresses.length === 1 ? '' : 'es'} in common`);
+  return bits.join(' · ') || 'linked';
+}
+
 function dossierBody(d) {
   const logins = d.logins.filter((l) => l.login);
+  const connections = d.connections || d.sharedWith || []; // sharedWith: older shape
+  const banned = connections.filter((c) => c.restriction).length;
+  const notes = d.notes || [];
   return `
+    ${
+      notes.length
+        ? `<div class="block">
+             <div class="block-label">Notes</div>
+             <div class="board">${notes
+               .map((n) => `
+                 <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
+                   <div class="dn">${esc(n.text)}</div>
+                   <div class="dr">${n.at ? esc(dateShort(n.at)) : ''}</div>
+                 </div>`)
+               .join('')}</div>
+           </div>`
+        : ''
+    }
+
     <div class="block">
       <div class="block-label">Addresses</div>
       ${
@@ -965,18 +994,22 @@ function dossierBody(d) {
     </div>
 
     <div class="block">
-      <div class="block-label">Shares an address with</div>
-      <p class="rule-text">Two accounts on one address is evidence, not proof — a household and a shared connection look identical from here.</p>
+      <div class="block-label">Connected accounts${banned ? ` <span class="conn-alarm">${banned} banned</span>` : ''}</div>
+      <p class="rule-text">Accounts the core has tied to them, or that have come from one of their addresses. A shared address is evidence, not proof — a household and a shared connection look identical from here — but a <b>banned</b> account on the same line is the shape of ban evasion.</p>
       ${
-        d.sharedWith.length
-          ? `<div class="board">${d.sharedWith
+        connections.length
+          ? `<div class="board">${connections
             .map((s) => `
-              <div class="board-row entry" style="grid-template-columns:1fr auto;gap:12px">
-                <div><div class="dn">${esc(s.name)}</div><div class="dr">${s.addresses.length} address${s.addresses.length === 1 ? '' : 'es'} in common</div></div>
+              <div class="board-row entry ${s.restriction ? 'conn-banned' : ''}" style="grid-template-columns:1fr auto auto;gap:10px">
+                <div style="min-width:0">
+                  <div class="dn">${esc(s.name)}</div>
+                  <div class="dr">${esc(connectionWhy(s))}</div>
+                </div>
+                ${s.restriction ? `<span class="badge dead">${esc(s.restriction.toLowerCase())}</span>` : '<span></span>'}
                 <a class="btn" href="/players?q=${encodeURIComponent(s.name)}">Look up</a>
               </div>`)
             .join('')}</div>`
-          : '<div class="board"><div class="empty">Nobody else has used these addresses.</div></div>'
+          : '<div class="board"><div class="empty">No other account is tied to them.</div></div>'
       }
     </div>
 

@@ -1399,3 +1399,12 @@ a.lc-name:hover { text-decoration: underline; }
 .pulse-row.ev-join   { border-left-color: var(--mc-green); } .ev-join .pulse-ic, .ev-join .ev-verb { color: var(--mc-green); }
 .pulse-row.ev-leave  { border-left-color: var(--mc-dark-gray); } .ev-leave .pulse-ic, .ev-leave .ev-verb { color: var(--mc-gray); }
 .pulse-row.ev-cmd    { border-left-color: var(--mc-blue); } .ev-cmd .pulse-ic { color: var(--mc-blue); }
+
+/* The dossier's ban-evasion tell: a connected account under a live restriction
+   is edged red and counted in the section label, because it is the one thing on
+   the page worth opening it for. */
+.conn-alarm {
+  font-size: 13px; color: var(--mc-red); text-shadow: 2px 2px 0 #3f1515;
+  border: 1px solid var(--mc-dark-red); padding: 0 5px; margin-left: 4px;
+}
+.board-row.conn-banned { border-color: var(--mc-dark-red); background: rgba(170, 0, 0, 0.12); }
