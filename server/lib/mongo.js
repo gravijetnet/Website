@@ -78,6 +78,10 @@ const site = {
   // Point-in-time copies of the network config (ranks, ladders, report menu,
   // rules) so a bad edit has an undo. See lib/backups.
   backups: () => collection(config.mongo.siteDb, 'backups'),
+  // What players tell us about the game: bugs to fix, and things they wish it
+  // did. Ours to write — the game has no concept of either. See routes/feedback.
+  bugs: () => collection(config.mongo.siteDb, 'bugs'),
+  suggestions: () => collection(config.mongo.siteDb, 'suggestions'),
 };
 
 async function ping() {

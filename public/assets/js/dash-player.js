@@ -13,11 +13,13 @@ import { icons } from './icons.js';
 import { pageLoader, notice } from './components.js';
 import { esc, head, timeAgo, dateShort, dur } from './util.js';
 import { renderApply, renderReport, renderAppeal } from './forms.js';
+import { renderFeedback } from './dash-feedback.js';
 
 // The list tabs, plus the three verbs that file into them. apply/report/appeal
 // are sub-pages of their list — see shell.PLAYER_TAB_OF, which lights the list
-// tab up while you are on its form.
-const TABS = ['', 'applications', 'reports', 'appeals', 'account', 'apply', 'report', 'appeal'];
+// tab up while you are on its form. Feedback carries its own sub-forms (bug,
+// suggestion) under one tab key, so it needs no such mapping.
+const TABS = ['', 'applications', 'reports', 'appeals', 'account', 'feedback', 'apply', 'report', 'appeal'];
 
 function wall(returnTo) {
   return `
@@ -52,6 +54,7 @@ export async function renderPlayerDash(root, tab, sub) {
     else if (tab === 'reports') await paintReports(body);
     else if (tab === 'appeals') await paintAppeals(body);
     else if (tab === 'account') await paintAccount(body, me);
+    else if (tab === 'feedback') await renderFeedback(body, sub);
     // The three filing verbs, rendered by forms.js into this same body. They are
     // only reachable signed in, which the wall above has already guaranteed.
     else if (tab === 'apply') await renderApply(body, sub);

@@ -49,15 +49,17 @@ async function audit(req, action, subject, extra = {}) {
 
 router.get('/dash/summary', staff.requires('viewReports'), async (req, res) => {
   try {
-    const [apps, reports, appeals, hiddenCount] = await Promise.all([
+    const [apps, reports, appeals, hiddenCount, bugs, suggestions] = await Promise.all([
       (await mongo.site.applications()).countDocuments({ status: 'pending' }),
       (await mongo.site.reports()).countDocuments({ status: 'open' }),
       (await mongo.site.appeals()).countDocuments({ status: 'open' }),
       (await mongo.site.hidden()).countDocuments({}),
+      (await mongo.site.bugs()).countDocuments({ status: 'open' }).catch(() => 0),
+      (await mongo.site.suggestions()).countDocuments({ status: 'open' }).catch(() => 0),
     ]);
     res.json({
       you: { ranks: req.staff.ranks, tier: req.staff.tier, can: req.staff.abilities },
-      pending: { applications: apps, reports, appeals, hidden: hiddenCount },
+      pending: { applications: apps, reports, appeals, hidden: hiddenCount, bugs, suggestions },
     });
   } catch (err) {
     console.error('[dash summary]', err);
@@ -74,7 +76,7 @@ router.get('/dash/summary', staff.requires('viewReports'), async (req, res) => {
 router.get('/dash/queue', staff.requires('viewReports'), async (req, res) => {
   const can = req.staff.abilities;
   try {
-    const [apps, reports, appeals] = await Promise.all([
+    const [apps, reports, appeals, bugs] = await Promise.all([
       can.viewApplications
         ? (await mongo.site.applications()).find({ status: 'pending' }).sort({ submittedAt: 1 }).limit(50).toArray()
         : [],
@@ -82,6 +84,9 @@ router.get('/dash/queue', staff.requires('viewReports'), async (req, res) => {
       can.viewAppeals
         ? (await mongo.site.appeals()).find({ status: 'open' }).sort({ filedAt: 1 }).limit(50).toArray()
         : [],
+      // A bug is a defect sitting in the game until somebody looks — so it waits
+      // in the same queue a report does, oldest first with everything else.
+      (await mongo.site.bugs()).find({ status: 'open' }).sort({ filedAt: 1 }).limit(50).toArray().catch(() => []),
     ]);
 
     const items = [
@@ -108,6 +113,14 @@ router.get('/dash/queue', staff.requires('viewReports'), async (req, res) => {
         title: `${a.target?.name || a.punishmentId} — ${a.punishment?.type || 'punishment'}`,
         detail: a.reason,
         href: '/appeals',
+      })),
+      ...bugs.map((b) => ({
+        kind: 'bug',
+        id: b._id,
+        at: b.filedAt,
+        title: `${b.title}${b.area ? ` — ${b.area}` : ''}`,
+        detail: b.detail,
+        href: '/feedback',
       })),
     ].sort((a, b) => (a.at || 0) - (b.at || 0));
 

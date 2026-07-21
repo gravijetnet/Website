@@ -30,6 +30,7 @@ import { renderPanel } from './dash-panel.js';
 import { renderLive } from './dash-live.js';
 import { renderActivity } from './dash-activity.js';
 import { renderPunishments } from './dash-punishments.js';
+import { renderFeedbackAdmin } from './dash-feedback-admin.js';
 import { attachPlayerSuggest } from './suggest.js';
 
 const SITE = 'https://example.invalid';
@@ -87,6 +88,7 @@ export async function renderStaffDash(root, tab, sub) {
     else if (active.key === 'applications') await paintApplications(body, can);
     else if (active.key === 'reports') await paintReports(body, can);
     else if (active.key === 'appeals') await paintAppeals(body, can);
+    else if (active.key === 'feedback') await renderFeedbackAdmin(body, can);
     else if (active.key === 'players') await paintPlayers(body, can);
     else if (active.key === 'users') await renderUsers(body, can);
     else if (active.key === 'live') await renderLive(body, can);
@@ -247,7 +249,7 @@ function sidebar(can, tab, sub) {
 
 // --- the queue -------------------------------------------------------------
 
-const KIND_ICON = { application: 'staff', report: 'report', appeal: 'shield' };
+const KIND_ICON = { application: 'staff', report: 'report', appeal: 'shield', bug: 'bolt' };
 
 // How long something has waited, said plainly. "3d ago" is a fact; "waiting 3
 // days" is the same fact pointed at the person who has to do something about it.

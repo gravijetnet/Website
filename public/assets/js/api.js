@@ -112,6 +112,13 @@ export const api = {
   report: (body) => send('/report', 'POST', body),
   appeal: (body) => send('/appeal', 'POST', body),
 
+  // Bugs and suggestions — what a player tells us about the game (routes/feedback).
+  submitBug: (body) => send('/feedback/bug', 'POST', body),
+  submitSuggestion: (body) => send('/feedback/suggestion', 'POST', body),
+  myFeedback: () => get('/my/feedback'),
+  board: (sort) => get(`/feedback/board${sort ? `?sort=${encodeURIComponent(sort)}` : ''}`),
+  vote: (id) => send(`/feedback/suggestion/${encodeURIComponent(id)}/vote`, 'POST'),
+
   dash: {
     summary: () => get('/dash/summary'),
     queue: () => get('/dash/queue'),
@@ -173,6 +180,10 @@ export const api = {
 
     // Who on the team has been moderating, and how much (routes/admin).
     staffActivity: () => get('/dash/staff-activity'),
+
+    // Bugs and suggestions, for triage (routes/feedback).
+    feedback: (kind, status) => get(`/dash/feedback?kind=${encodeURIComponent(kind || 'bug')}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+    setFeedback: (kind, id, status, note) => send(`/dash/feedback/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, 'POST', { status, note }),
 
     // Announcements to the game (routes/moderation). kind 'staff' becomes the
     // core's own prefixed alert; 'all' a network-wide announcement.

@@ -58,6 +58,7 @@ export const PLAYER_TABS = [
   { key: 'applications', label: 'Applications' },
   { key: 'reports', label: 'Reports' },
   { key: 'appeals', label: 'Appeals' },
+  { key: 'feedback', label: 'Feedback' },
   { key: 'account', label: 'Account' },
 ];
 
@@ -79,6 +80,7 @@ export const STAFF_TABS = [
   { key: 'applications', label: 'Applications', need: 'viewApplications' },
   { key: 'reports', label: 'Reports', need: 'viewReports' },
   { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
+  { key: 'feedback', label: 'Feedback', need: 'viewReports' },
   { key: 'players', label: 'Players', need: 'viewPlayers' },
   { key: 'users', label: 'Users', need: 'viewPlayers' },
   { key: 'live', label: 'Live', need: 'viewReports' },
@@ -111,6 +113,7 @@ export const CONSOLE_NAV = [
       { path: '/applications', label: 'Applications', need: 'viewApplications' },
       { path: '/reports', label: 'Reports', need: 'viewReports' },
       { path: '/appeals', label: 'Appeals', need: 'viewAppeals' },
+      { path: '/feedback', label: 'Feedback', need: 'viewReports' },
     ],
   },
   {
