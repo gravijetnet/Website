@@ -1017,6 +1017,34 @@ function identityChips(id) {
   return `<div class="block"><div class="block-label">Identity</div><div class="altrow">${chips.join('')}</div></div>`;
 }
 
+// When they play, bucketed by the hour in the viewer's own clock — the server
+// sends raw login times precisely so this reads right wherever it is opened. Two
+// accounts that light up the same hours are a lead: a ban-evader's alt keeps the
+// evader's schedule. The totals beside it come from the server, where the
+// timezone cannot get them wrong.
+function playPattern(d) {
+  const times = d.loginTimes || [];
+  const s = d.sessions || {};
+  if (!times.length && !s.seen) return '';
+  const hours = new Array(24).fill(0);
+  for (const t of times) hours[new Date(t).getHours()] += 1;
+  const peak = Math.max(1, ...hours);
+  const totalSec = Math.round((s.totalMs || 0) / 1000);
+  const longestSec = Math.round((s.longestMs || 0) / 1000);
+  const stat = [`${int(s.seen || 0)} session${s.seen === 1 ? '' : 's'}`];
+  if (totalSec) stat.push(`${playtime(totalSec)} online`);
+  if (longestSec) stat.push(`longest ${playtime(longestSec)}`);
+  return `
+    <div class="block">
+      <div class="block-label">When they play</div>
+      <div class="ph-sub">${esc(stat.join(' · '))}</div>
+      <div class="playgrid">
+        ${hours.map((n, h) => `<span class="playbar${n ? '' : ' empty'}" style="height:${Math.round((n / peak) * 100)}%" title="${h}:00 — ${n} login${n === 1 ? '' : 's'}"></span>`).join('')}
+      </div>
+      <div class="playaxis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
+    </div>`;
+}
+
 function dossierBody(d) {
   const logins = d.logins.filter((l) => l.login);
   const connections = d.connections || d.sharedWith || []; // sharedWith: older shape
@@ -1047,6 +1075,8 @@ function dossierBody(d) {
           : '<p class="rule-text">No address on record.</p>'
       }
     </div>
+
+    ${playPattern(d)}
 
     <div class="block">
       <div class="block-label">Connected accounts${banned ? ` <span class="conn-alarm">${banned} banned</span>` : ''}</div>

@@ -492,15 +492,39 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
     const loginCol = await mongo.phoenix.logins();
     const profileCol = await mongo.phoenix.profiles();
 
-    const [logins, profile] = await Promise.all([
-      loginCol.find({ target: identity.uuid }).sort({ login: -1 }).limit(60).toArray(),
+    const [sessions, profile] = await Promise.all([
+      // Enough of their history to see a pattern, not just the last handful. The
+      // recent list shown on the page is sliced from this; the addresses and the
+      // play-time reading are drawn from all of it, so a shared address from six
+      // months ago is not missed for having scrolled off a 60-row window.
+      loginCol.find({ target: identity.uuid }).sort({ login: -1 }).limit(500).toArray(),
       profileCol.findOne(
         { _id: identity.uuid },
         { projection: { alts: 1, siblings: 1, notes: 1, authType: 1, twoFactor: 1, disguiseData: 1, tagName: 1, customTag: 1 } },
       ),
     ]);
+    const logins = sessions.slice(0, 60);
 
-    const addresses = [...new Set(logins.map((l) => l.ip).filter(Boolean))];
+    // What their sessions add up to: how many, how long in total, the longest
+    // single sitting. Timezone-independent arithmetic, so it is done here; the
+    // hour-of-day pattern is left to the client, which knows the viewer's clock.
+    let sessionMs = 0;
+    let longestMs = 0;
+    let completeSessions = 0;
+    const loginTimes = [];
+    for (const s of sessions) {
+      const start = Number(s.login) || 0;
+      const end = Number(s.logout) || 0;
+      if (start) loginTimes.push(start);
+      if (start && end > start) {
+        const span = end - start;
+        sessionMs += span;
+        if (span > longestMs) longestMs = span;
+        completeSessions += 1;
+      }
+    }
+
+    const addresses = [...new Set(sessions.map((l) => l.ip).filter(Boolean))];
 
     // Everyone else who has come from one of those addresses.
     const shared = addresses.length
@@ -580,6 +604,15 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
         login: Number(l.login) || null,
         logout: Number(l.logout) || null,
       })),
+      // The play pattern: raw login times for the client to bucket by the
+      // viewer's own clock, and the totals that do not depend on a timezone.
+      loginTimes,
+      sessions: {
+        seen: sessions.length,
+        completed: completeSessions,
+        totalMs: sessionMs,
+        longestMs,
+      },
       addresses,
       // Staff notes the core keeps on the profile, newest first. Shape varies by
       // core version, so each is reduced to text + who + when as best it can be.
