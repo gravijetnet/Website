@@ -224,20 +224,25 @@ router.put('/dash/access/:discordId', staff.requires('manageAccess'), json, asyn
 
     // The permission check caches each person's override for half a minute
     // (lib/staff.overrideFor); drop this one so the change is in force on their
-    // very next request rather than at the end of the window.
-    require('../lib/cache').bust(`override:${target}`);
+    // very next request rather than at the end of the window. The bust follows
+    // the write, not precedes it — dropping the key first would leave a gap in
+    // which a concurrent read of this person re-caches the old value for the
+    // whole window.
+    const access = await mongo.site.access();
 
     if (!grant.length && !deny.length) {
-      await (await mongo.site.access()).deleteOne({ _id: target });
+      await access.deleteOne({ _id: target });
+      require('../lib/cache').bust(`override:${target}`);
       await audit.record(req, 'access.clear', target, { name: them?.name || null });
       return res.json({ ok: true, cleared: true });
     }
 
-    await (await mongo.site.access()).replaceOne(
+    await access.replaceOne(
       { _id: target },
       { _id: target, name: them?.name || null, grant, deny, at: Date.now(), by: audit.actor(req) },
       { upsert: true },
     );
+    require('../lib/cache').bust(`override:${target}`);
     await audit.record(req, 'access.set', target, { name: them?.name || null, grant, deny });
     res.json({ ok: true });
   } catch (err) {
