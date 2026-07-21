@@ -1280,3 +1280,122 @@ textarea.fld.mono { line-height: 1.45; }
   width: 100%; min-height: 320px; resize: vertical;
   font-size: 14px; line-height: 1.45; white-space: pre; overflow-wrap: normal; overflow-x: auto;
 }
+
+/* --------------------------------------------------------- command palette */
+/* The keyboard shortcut over the whole console. It is the dialog's darker
+   cousin — same darkened world, same bevelled panel — but anchored near the top
+   where a launcher belongs and where the eyes already are when you hit ⌘K. */
+.pal-back {
+  position: fixed; inset: 0; z-index: 210;
+  background: rgba(0, 0, 0, 0.66);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 84px 20px 20px;
+}
+.pal {
+  width: 100%; max-width: 560px;
+  background: #0d0d0d; border: 2px solid var(--outline);
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.14), inset -2px -2px 0 rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column; max-height: 70vh;
+}
+.pal-top {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-bottom: 2px solid var(--slot-lo); background: rgba(0, 0, 0, 0.4);
+}
+.pal-search { width: 20px; height: 20px; color: var(--mc-gray); flex: none; }
+.pal-search svg { width: 20px; height: 20px; }
+.pal-in {
+  flex: 1; min-width: 0; background: none; border: 0; outline: none;
+  color: var(--mc-white); font-family: var(--font); font-size: 16px; text-shadow: 2px 2px 0 #3f3f3f;
+}
+.pal-in::placeholder { color: var(--mc-dark-gray); }
+.pal-esc, .pal-foot kbd {
+  font-family: var(--font); font-size: 12px; color: var(--mc-gray);
+  background: var(--btn-off); border: 2px solid var(--outline);
+  padding: 1px 6px; box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.12);
+}
+.pal-list { overflow-y: auto; padding: 6px; }
+.pal-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; background: none; border: 0; text-align: left; cursor: pointer;
+}
+.pal-row.sel { background: var(--mc-dark-blue); }
+.pal-ic { width: 18px; height: 18px; color: var(--mc-gray); flex: none; }
+.pal-row.sel .pal-ic { color: var(--mc-white); }
+.pal-ic svg { width: 18px; height: 18px; }
+.pal-lab { font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pal-hint { margin-left: auto; padding-left: 10px; font-size: 14px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; white-space: nowrap; flex: none; }
+.pal-empty { padding: 20px 12px; font-size: 16px; color: var(--mc-gray); text-shadow: 2px 2px 0 #2a2a2a; }
+.pal-foot {
+  display: flex; gap: 16px; padding: 8px 12px;
+  border-top: 2px solid var(--slot-lo); background: rgba(0, 0, 0, 0.3);
+  font-size: 13px; color: var(--mc-gray);
+}
+.pal-foot span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ------------------------------------------------------------------ live */
+/* The watch screen: two panes, chat filling from the bottom on the left and a
+   pulse of everything else on the right. Both are monospace blocks over black —
+   they are logs that move, and a log is read in a fixed column. */
+.live-ctl { display: flex; align-items: center; gap: 8px; }
+.live-beat {
+  display: inline-block; width: 9px; height: 9px; margin-right: 9px; vertical-align: middle;
+  background: var(--mc-green); border: 1px solid #0a3f0a;
+  animation: livebeat 1.4s ease-in-out infinite;
+}
+.live-beat.off { background: var(--mc-dark-gray); border-color: #000; animation: none; }
+@keyframes livebeat { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+.live-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; align-items: stretch; }
+@media (max-width: 900px) { .live-grid { grid-template-columns: 1fr; } }
+.live-pane { display: flex; flex-direction: column; min-height: 0; }
+.live-head {
+  padding: 8px 12px; font-size: 16px; color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f;
+  border-bottom: 2px solid var(--slot-lo); background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: baseline; gap: 10px;
+}
+.live-sub { font-size: 14px; color: var(--mc-gold); text-shadow: 2px 2px 0 #3f2a00; }
+.livechat, .livepulse {
+  height: 62vh; min-height: 320px; overflow-y: auto; padding: 8px 10px; background: #000;
+}
+.live-empty { padding: 22px 10px; font-size: 15px; color: var(--mc-dark-gray); }
+
+/* Chat: time, name, line — a fixed grid so names align down the left of the
+   messages the way they do in game. A flagged line wears a red edge and the
+   name of the filter it trips, because that is the one a moderator is scanning
+   for. */
+.lc-line {
+  display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; align-items: baseline;
+  padding: 2px 4px; font-size: 15px; line-height: 1.5; border-left: 2px solid transparent;
+}
+.lc-line:hover { background: rgba(255, 255, 255, 0.04); }
+.lc-line.flagged { border-left-color: var(--mc-red); background: rgba(170, 0, 0, 0.14); }
+.lc-t { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--mc-dark-gray); }
+.lc-name { font-weight: 400; text-shadow: 1px 1px 0 #000; white-space: nowrap; }
+a.lc-name:hover { text-decoration: underline; }
+.lc-msg { color: var(--mc-white); text-shadow: 1px 1px 0 #000; word-break: break-word; min-width: 0; }
+.lc-hit { background: var(--mc-yellow); color: #000; text-shadow: none; }
+.lc-flag {
+  font-size: 12px; color: var(--mc-red); text-shadow: 1px 1px 0 #000; white-space: nowrap;
+  border: 1px solid var(--mc-dark-red); padding: 0 4px; align-self: center;
+}
+
+/* Pulse: an icon coloured by kind, then the sentence and how long ago. The left
+   edge carries the colour so a column of events reads as a column of kinds. */
+.pulse-row {
+  display: flex; gap: 10px; padding: 7px 6px; border-left: 3px solid var(--slot-lo);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.pulse-ic { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--mc-gray); }
+.pulse-ic svg { width: 18px; height: 18px; }
+.pulse-body { min-width: 0; }
+.pulse-txt { font-size: 15px; line-height: 1.45; color: var(--mc-white); text-shadow: 1px 1px 0 #000; word-break: break-word; }
+.pulse-txt b { font-weight: 400; }
+.pulse-when { font-size: 13px; color: var(--mc-dark-gray); margin-top: 1px; }
+.ev-note { color: var(--mc-gray); }
+.ev-perm { color: var(--mc-red); }
+.pulse-row.ev-punish { border-left-color: var(--mc-red); } .ev-punish .pulse-ic, .ev-punish .ev-verb { color: var(--mc-red); }
+.pulse-row.ev-warn   { border-left-color: var(--mc-gold); } .ev-warn .pulse-ic, .ev-warn .ev-verb { color: var(--mc-gold); }
+.pulse-row.ev-lift   { border-left-color: var(--mc-green); } .ev-lift .pulse-ic, .ev-lift .ev-verb { color: var(--mc-green); }
+.pulse-row.ev-join   { border-left-color: var(--mc-green); } .ev-join .pulse-ic, .ev-join .ev-verb { color: var(--mc-green); }
+.pulse-row.ev-leave  { border-left-color: var(--mc-dark-gray); } .ev-leave .pulse-ic, .ev-leave .ev-verb { color: var(--mc-gray); }
+.pulse-row.ev-cmd    { border-left-color: var(--mc-blue); } .ev-cmd .pulse-ic { color: var(--mc-blue); }

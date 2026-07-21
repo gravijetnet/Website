@@ -134,6 +134,11 @@ export const api = {
     commandLogs: (q, limit) => get(`/dash/logs/commands?q=${encodeURIComponent(q || '')}&limit=${limit || 100}`),
     chatLogs: (q, limit) => get(`/dash/logs/chat?q=${encodeURIComponent(q || '')}&limit=${limit || 100}`),
 
+    // The live feeds behind the Live page (routes/live). Both take a `since`
+    // millisecond cursor and return only what is newer.
+    chatFeed: (since, limit) => get(`/dash/feed/chat?since=${since || 0}&limit=${limit || 60}`),
+    pulse: (since, limit) => get(`/dash/pulse?since=${since || 0}&limit=${limit || 40}`),
+
     // Announcements to the game (routes/moderation). kind 'staff' becomes the
     // core's own prefixed alert; 'all' a network-wide announcement.
     broadcast: (kind, message) => send('/dash/broadcast', 'POST', { kind, message }),

@@ -13,6 +13,7 @@ import {
 } from './views.js';
 import { renderPlayerDash } from './dash-player.js';
 import { renderStaffDash } from './dash-staff.js';
+import { initPalette } from './palette.js';
 
 // Filing something is dashboard work, not site work.
 //
@@ -232,6 +233,7 @@ async function route(path, params) {
 
 wireSound();
 wireSearch();
+initPalette();
 startRouter(route);
 // Only the site chrome carries a pill; pollLive returns immediately elsewhere.
 setInterval(pollLive, 30000);

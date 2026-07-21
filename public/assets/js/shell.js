@@ -81,6 +81,7 @@ export const STAFF_TABS = [
   { key: 'appeals', label: 'Appeals', need: 'viewAppeals' },
   { key: 'players', label: 'Players', need: 'viewPlayers' },
   { key: 'users', label: 'Users', need: 'viewPlayers' },
+  { key: 'live', label: 'Live', need: 'viewReports' },
   { key: 'logs', label: 'Logs', need: 'viewReports' },
   { key: 'rules', label: 'Rules', need: 'manageRules' },
   // A hub, not a page — see NETWORK_PAGES. Shown to anybody who can reach at
@@ -120,6 +121,7 @@ export const CONSOLE_NAV = [
   {
     group: 'The network',
     items: [
+      { path: '/live', label: 'Live', need: 'viewReports' },
       { path: '/network/servers', label: 'Servers', need: 'viewReports' },
       { path: '/network/host', label: 'Host', need: 'manageNetwork' },
       { path: '/network/broadcast', label: 'Broadcast', need: 'broadcast' },
