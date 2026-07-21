@@ -20,8 +20,14 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 function safeReturn(to) {
   // Only same-site paths: an open redirect here would let someone hand out a
   // example.invalid login link that lands on their own page afterwards.
-  const s = String(to || '/');
-  return /^\/(?!\/)/.test(s) ? s : '/';
+  //
+  // Strip the characters a browser quietly drops from a URL first (tab, CR, LF),
+  // so `/\t//evil.com` cannot slip a `//evil.com` past the test. Then require a
+  // leading slash NOT followed by another slash OR a backslash: `//evil.com` is
+  // protocol-relative, and `/\evil.com` is the same thing once the browser
+  // normalises the backslash to a slash — both leave the site.
+  const s = String(to || '/').replace(/[\t\r\n]/g, '');
+  return /^\/($|[^/\\])/.test(s) ? s : '/';
 }
 
 router.get('/auth/discord', (req, res) => {

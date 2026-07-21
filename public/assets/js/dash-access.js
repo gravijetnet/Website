@@ -34,14 +34,14 @@ export async function renderAccess(root, can) {
         <p>Everyone with a staff rank, and anyone given an exception. A ticked box is something they can do.</p>
       </div>
     </div>
-    <div id="people">${data.people.map((p) => personEl(p, data)).join('')}</div>`;
+    <div id="people">${data.people.map((p) => personEl(p, data, can)).join('')}</div>`;
 
   wire(root, data);
 }
 
 // The abilities that are on for this person right now, and whether each is on
 // because of their tier or because of an explicit exception.
-function personEl(p, data) {
+function personEl(p, data, can) {
   const you = p.id === data.you.id;
   // You may not edit somebody standing at or above you. It is still shown — the
   // page is also a way to read who can do what — just not editable.
@@ -59,7 +59,7 @@ function personEl(p, data) {
       <div class="panel-body">
         <div class="ph-sub">${p.ranks.length ? esc(p.ranks.join(', ')) : 'no rank'}${p.updatedAt ? ` · exception set ${esc(timeAgo(p.updatedAt))}${p.updatedBy ? ` by ${esc(p.updatedBy)}` : ''}` : ''}</div>
         <div class="acc-grid">
-          ${data.abilities.map((a) => abilityBox(a, p, locked, data)).join('')}
+          ${data.abilities.map((a) => abilityBox(a, p, locked, data, can)).join('')}
         </div>
         <div class="factions">
           ${locked ? '<span class="dr">outranks you — read only</span>' : '<button class="btn btn-primary" data-save>Save</button>'}
@@ -69,15 +69,20 @@ function personEl(p, data) {
     </details>`;
 }
 
-function abilityBox(a, p, locked, data) {
+function abilityBox(a, p, locked, data, can) {
   const on = !!p.abilities[a.key];
   // The tier alone would give this, before any exception — so the UI can say
   // "this box is ticked because of their rank" vs "because you ticked it".
   const byTier = p.tier >= (data.needs[a.key] || 99);
   const overridden = (on && !byTier) || (!on && byTier);
+  // You cannot grant what you do not hold yourself (the server enforces this too).
+  // So an ability you lack, currently off for them, is not yours to switch on —
+  // shown, but disabled, rather than a tickable box that would only bounce on save.
+  // An ability that is already on can still be unticked: denying is always allowed.
+  const cannotGrant = !locked && !on && can && !can[a.key];
   return `
-    <label class="acc-item ${overridden ? 'acc-over' : ''}" title="${esc(a.note || '')}">
-      <input type="checkbox" data-ability="${esc(a.key)}" data-tier="${byTier ? '1' : '0'}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}>
+    <label class="acc-item ${overridden ? 'acc-over' : ''} ${cannotGrant ? 'acc-nope' : ''}" title="${esc(cannotGrant ? 'You do not hold this yourself, so you cannot grant it.' : (a.note || ''))}">
+      <input type="checkbox" data-ability="${esc(a.key)}" data-tier="${byTier ? '1' : '0'}" ${on ? 'checked' : ''} ${locked || cannotGrant ? 'disabled' : ''}>
       <span class="acc-label">${esc(a.label)}</span>
       ${a.note ? `<span class="acc-note">${esc(a.note)}</span>` : ''}
     </label>`;
@@ -113,6 +118,7 @@ function wire(root, data) {
         msg.textContent =
           err?.body?.error === 'target_outranks_you' ? 'They outrank you.'
           : err?.body?.error === 'cannot_lock_yourself_out' ? 'You cannot deny yourself this page.'
+          : err?.body?.error === 'grant_exceeds_yours' ? 'You cannot grant an ability you do not hold yourself.'
           : 'That did not save.';
       } finally {
         btn.disabled = false;

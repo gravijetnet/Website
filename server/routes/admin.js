@@ -222,6 +222,19 @@ router.put('/dash/access/:discordId', staff.requires('manageAccess'), json, asyn
       return res.status(400).json({ error: 'cannot_lock_yourself_out' });
     }
 
+    // You cannot hand out an ability you do not hold yourself — not to a
+    // subordinate, and above all not to your own row. Without this, manageAccess
+    // is a master key rather than a delegation tool: an Admin, who by the tier
+    // ladder has no runCommands, could grant it (the one power the design caps at
+    // Management and nowhere else) and step straight over that ceiling. An
+    // override may only redistribute power that already exists above it; it can
+    // never mint power from nothing. Management still holds runCommands, so
+    // Management is still the only place a grant of it can legitimately come from.
+    const overreach = grant.filter((k) => !req.staff.abilities[k]);
+    if (overreach.length) {
+      return res.status(403).json({ error: 'grant_exceeds_yours', abilities: overreach });
+    }
+
     // The permission check caches each person's override for half a minute
     // (lib/staff.overrideFor); drop this one so the change is in force on their
     // very next request rather than at the end of the window. The bust follows
@@ -410,6 +423,17 @@ router.post('/dash/config/rank', staff.requires('manageNetwork'), json, async (r
     // Owner-rank protection, on the rank as it stands now.
     if (existing && Number(existing.priority) >= OWNER_FLOOR && req.staff.tier < staff.TIER.Management) {
       return res.status(403).json({ error: 'rank_protected' });
+    }
+    // And on the rank as it is being asked to become. The floor is a ceiling on
+    // reaching it as much as on editing what already sits there: without this an
+    // Admin could mint a new rank above the network's top standing, or lift a
+    // grantable one into it, and the check above — which only reads the current
+    // priority — would never see it. Only Management may place a rank this high.
+    if (op !== 'delete' && 'priority' in req.body && req.staff.tier < staff.TIER.Management) {
+      const wantPriority = Math.trunc(Number(req.body.priority));
+      if (Number.isFinite(wantPriority) && wantPriority >= OWNER_FLOOR) {
+        return res.status(403).json({ error: 'rank_protected' });
+      }
     }
 
     let action;

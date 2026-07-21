@@ -1011,6 +1011,9 @@ a.ptile:hover .pt-n { color: var(--btn-fg-hi); }
 /* A box that no longer matches the rank default — an exception you have made. */
 .acc-over { border-color: rgba(255, 170, 0, 0.5); }
 .acc-item input[disabled] { opacity: 0.4; }
+/* An ability the editor does not hold themselves, so it is not theirs to grant. */
+.acc-nope { cursor: not-allowed; }
+.acc-nope .acc-label { opacity: 0.45; }
 
 /* --------------------------------------------------- the network editor */
 /* Ranks and ladders. The danger button — delete a rank, drop a rung — wears the

@@ -212,7 +212,9 @@ router.post('/feedback/suggestion/:id/vote', async (req, res) => {
 
 router.get('/dash/feedback', staff.requires('viewReports'), async (req, res) => {
   try {
-    const kind = KINDS[req.query.kind] ? req.query.kind : 'bug';
+    // hasOwnProperty, not a bare `KINDS[x]`: `?kind=constructor` would otherwise
+    // resolve to an inherited Object property and read as a real kind.
+    const kind = Object.prototype.hasOwnProperty.call(KINDS, req.query.kind) ? req.query.kind : 'bug';
     const status = KINDS[kind].statuses.includes(String(req.query.status)) ? String(req.query.status) : null;
     const filter = status ? { status } : {};
 
@@ -257,7 +259,9 @@ router.get('/dash/feedback', staff.requires('viewReports'), async (req, res) => 
 
 router.post('/dash/feedback/:kind/:id', staff.requires('resolveReports'), json, async (req, res) => {
   const kind = req.params.kind;
-  if (!KINDS[kind]) return res.status(400).json({ error: 'unknown_kind' });
+  // hasOwnProperty guards against `constructor`/`__proto__`, which are truthy on a
+  // bare `KINDS[kind]` and would then throw on `.statuses` outside the try below.
+  if (!Object.prototype.hasOwnProperty.call(KINDS, kind)) return res.status(400).json({ error: 'unknown_kind' });
 
   const status = String(req.body?.status || '');
   if (!KINDS[kind].statuses.includes(status)) return res.status(400).json({ error: 'unknown_status' });
