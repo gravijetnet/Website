@@ -15,6 +15,7 @@ const discordtasks = require('../lib/discordtasks');
 const playersLib = require('../lib/players');
 const phoenix = require('../lib/phoenix');
 const punishments = require('../lib/punishments');
+const live = require('../lib/live');
 const { cached, invalidate } = require('../lib/cache');
 
 // Reaching into the game from Spielplatz: punishments, and the rank ladder.
@@ -650,6 +651,124 @@ router.get('/dash/player/:name/dossier', staff.requires('viewPlayers'), async (r
   } catch (err) {
     console.error('[dash dossier]', err);
     res.status(500).json({ error: 'dossier_unavailable' });
+  }
+});
+
+// The whole record: every ban, mute, kick and blacklist the network has ever
+// handed out, in one filterable list.
+//
+// The dossier answers "what has happened to this one person"; this answers the
+// question a head of staff arrives with — "what have we been doing", and "is
+// this reason we keep typing actually a rule". It reads Phoenix's punishments
+// collection directly (read-only, like everything else that touches the core)
+// and never the `active` flag on its own: a kick is stored active-forever, so
+// "restricted right now" is decided by lib/punishments.isLive, not by the flag.
+const PUN_TYPES = ['BAN', 'MUTE', 'KICK', 'WARN', 'BLACKLIST'];
+const PUN_PER = 30;
+
+// A page's worth of names resolved in one go: the target, whoever issued it, and
+// whoever lifted it, each with their rank colour so the ledger reads the way the
+// game does.
+function punishmentRow(doc, ident, now) {
+  const s = punishments.shape(doc, now);
+  const t = ident.get(doc.target);
+  const by = doc.issuedBy ? ident.get(doc.issuedBy) : null;
+  const rem = doc.removedBy ? ident.get(doc.removedBy) : null;
+  return {
+    ...s,
+    target: { uuid: doc.target, name: t?.name || null, color: t?.color || null },
+    issuer: doc.issuedBy
+      ? { uuid: doc.issuedBy, name: by?.name || null, color: by?.color || null, staff: by?.staff || false }
+      : null,
+    remover: rem ? { name: rem.name, color: rem.color } : null,
+    server: doc.issuedOn || null,
+    silent: !!doc.silent,
+  };
+}
+
+router.get('/dash/punishments', staff.requires('viewPlayers'), async (req, res) => {
+  try {
+    const col = await mongo.phoenix.punishments();
+    const now = Date.now();
+
+    const typeParam = String(req.query.type || '').toUpperCase();
+    const type = PUN_TYPES.includes(typeParam) ? typeParam : null;
+    const state = ['live', 'lifted', 'expired'].includes(String(req.query.state))
+      ? String(req.query.state)
+      : 'all';
+    const q = String(req.query.q || '').trim().slice(0, 40);
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+
+    // The base set: everything, or everything a search narrows it to. A search
+    // matches a punishment id outright, or any account whose name contains the
+    // term — as the target of a punishment or as the staff member who gave it,
+    // so "gravijet" finds both what they did and what was done to them.
+    const filter = {};
+    if (q) {
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const named = await (await mongo.phoenix.profiles())
+        .find({ name: rx }, { projection: { _id: 1 } })
+        .limit(200)
+        .toArray();
+      const uuids = named.map((p) => p._id);
+      filter.$or = [
+        { punishmentID: rx },
+        ...(uuids.length ? [{ target: { $in: uuids } }, { issuedBy: { $in: uuids } }] : []),
+      ];
+    }
+
+    // The network is small enough to shape in memory, and the two questions the
+    // UI actually asks — "is it live right now" and the expiry state — need the
+    // arithmetic in lib/punishments that no Mongo query can do. Bounded so a
+    // grown collection cannot pull an unbounded amount into memory.
+    const docs = await col.find(filter).sort({ issuedAt: -1 }).limit(3000).toArray();
+
+    const stateOf = (d) => punishments.shape(d, now).state;
+    const inState = (d) => {
+      if (state === 'all') return true;
+      if (state === 'live') return punishments.isLive(d, now);
+      return stateOf(d) === state;
+    };
+
+    // Chip counts are computed over the search result before the type filter, so
+    // the numbers on the chips tell you how many of each you would see if you
+    // pressed them — including after a search has already cut the list down.
+    const stateMatched = docs.filter(inState);
+    const counts = { ALL: stateMatched.length, LIVE: 0 };
+    for (const t of PUN_TYPES) counts[t] = 0;
+    for (const d of stateMatched) {
+      const ty = String(d.punishmentType || '').toUpperCase();
+      if (ty in counts) counts[ty] += 1;
+      if (punishments.isLive(d, now)) counts.LIVE += 1;
+    }
+
+    const matched = stateMatched.filter(
+      (d) => !type || String(d.punishmentType || '').toUpperCase() === type,
+    );
+
+    const total = matched.length;
+    const pages = Math.max(1, Math.ceil(total / PUN_PER));
+    const clamped = Math.min(page, pages);
+    const slice = matched.slice((clamped - 1) * PUN_PER, clamped * PUN_PER);
+
+    const idUuids = [
+      ...new Set(slice.flatMap((d) => [d.target, d.issuedBy, d.removedBy].filter(Boolean))),
+    ];
+    const ident = await live.resolveIdentities(idUuids);
+
+    res.json({
+      total,
+      page: clamped,
+      pages,
+      per: PUN_PER,
+      type,
+      state,
+      counts,
+      rows: slice.map((d) => punishmentRow(d, ident, now)),
+    });
+  } catch (err) {
+    console.error('[dash punishments]', err);
+    res.status(500).json({ error: 'record_unavailable' });
   }
 });
 

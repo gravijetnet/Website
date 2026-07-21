@@ -29,6 +29,7 @@ import { renderDiscord } from './dash-discord.js';
 import { renderPanel } from './dash-panel.js';
 import { renderLive } from './dash-live.js';
 import { renderActivity } from './dash-activity.js';
+import { renderPunishments } from './dash-punishments.js';
 import { attachPlayerSuggest } from './suggest.js';
 
 const SITE = 'https://example.invalid';
@@ -90,6 +91,7 @@ export async function renderStaffDash(root, tab, sub) {
     else if (active.key === 'users') await renderUsers(body, can);
     else if (active.key === 'live') await renderLive(body, can);
     else if (active.key === 'logs') await renderLogs(body, can);
+    else if (active.key === 'punishments') await renderPunishments(body, can);
     else if (active.key === 'activity') await renderActivity(body, can);
     else if (active.key === 'rules') await renderRulesEditor(body, can);
     else if (active.key === 'network') await paintNetwork(body, can, sub);

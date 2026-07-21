@@ -231,6 +231,19 @@ export const api = {
     // One box over the whole console.
     search: (q) => get(`/dash/search?q=${encodeURIComponent(q)}`),
 
+    // The whole punishment record — every ban, mute, kick and blacklist the
+    // network has handed out, filterable by type, by whether it bites right now,
+    // and by player or staff name (routes/moderation).
+    punishmentRecord: ({ type, state, q, page } = {}) => {
+      const p = new URLSearchParams();
+      if (type) p.set('type', type);
+      if (state) p.set('state', state);
+      if (q) p.set('q', q);
+      if (page && page > 1) p.set('page', page);
+      const s = p.toString();
+      return get(`/dash/punishments${s ? `?${s}` : ''}`);
+    },
+
     // Everything the core recorded about one player, and chat frozen as evidence.
     dossier: (name) => get(`/dash/player/${encodeURIComponent(name)}/dossier`),
     takeSnapshot: (name) => send('/dash/player/snapshot', 'POST', { name }),

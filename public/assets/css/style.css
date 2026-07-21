@@ -1463,3 +1463,61 @@ a.dn:hover { text-decoration: underline; }
 .playbar { flex: 1; min-height: 2px; background: var(--mc-green); }
 .playbar.empty { background: var(--slot-lo); opacity: 0.5; }
 .playaxis { display: flex; justify-content: space-between; font-size: 12px; color: var(--mc-dark-gray); margin-top: 3px; }
+
+/* ---------------------------------------------------- the punishment record */
+/* The network's whole ledger of bans, mutes, kicks and blacklists. A row per
+   punishment, five columns on a wide console — who it hit, what it was, why,
+   who gave it, and whether it still bites — stacking when the console narrows.
+   The type chips carry live counts so a search tells you what pressing each one
+   would show before you press it. */
+.prbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
+.pr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pr-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pr-chip { font-size: 15px; padding: 7px 12px; min-height: 36px; display: inline-flex; align-items: center; gap: 7px; }
+.pr-chip.active { color: var(--mc-white); text-shadow: 2px 2px 0 #3f3f3f; border-color: var(--slot-hi); background: #0d0d0d; }
+.pr-cn { font-size: 12px; color: var(--mc-dark-gray); }
+.pr-chip.active .pr-cn { color: var(--mc-yellow); }
+
+.pr-count { font-size: 15px; color: var(--mc-gray); text-shadow: 1px 1px 0 #000; margin: 12px 2px 8px; }
+.pr-count b { color: var(--mc-white); }
+.pr-live { color: var(--mc-red) !important; }
+
+.pnrow {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.2fr) 80px minmax(130px, 1.7fr) minmax(120px, 0.9fr) 94px;
+  gap: 10px; align-items: center;
+  background: var(--entry); border: 2px solid var(--slot-lo);
+  padding: 8px 10px; margin-bottom: 6px;
+}
+.pnrow:hover { border-color: var(--slot); }
+.pr-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pr-who img { image-rendering: pixelated; border: 1px solid #000; flex-shrink: 0; }
+.pr-wg { min-width: 0; display: flex; flex-direction: column; }
+.pr-name { font-size: 16px; text-shadow: 2px 2px 0 #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.pr-name:hover { text-decoration: underline; }
+.pr-sub { font-size: 12px; color: var(--mc-dark-gray); text-shadow: 1px 1px 0 #000; overflow: hidden; text-overflow: ellipsis; }
+.pr-reason { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pr-rtext { font-size: 15px; color: var(--mc-white); text-shadow: 1px 1px 0 #000; word-break: break-word; }
+.pr-none { color: var(--mc-dark-gray); }
+.pr-by { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.pr-by .pr-name { font-size: 14px; }
+.pr-state { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+
+/* The type pill: each punishment its own colour so a page of them reads at a
+   glance. Red for a ban, purple for the blacklist above it, calmer shades for
+   the rest. */
+.pr-type { font-size: 13px; text-align: center; padding: 2px 4px; border: 1px solid; text-shadow: 1px 1px 0 #000; white-space: nowrap; }
+.pt-ban { color: var(--mc-red); border-color: #3f1515; }
+.pt-blacklist { color: var(--mc-light-purple); border-color: #3f153f; }
+.pt-mute { color: var(--mc-gold); border-color: #3f2a00; }
+.pt-kick { color: var(--mc-aqua); border-color: #153f3f; }
+.pt-warn { color: var(--mc-yellow); border-color: #3f3f15; }
+
+.pr-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 14px 0 4px; }
+.pr-pn { font-size: 15px; color: var(--mc-gray); text-shadow: 1px 1px 0 #000; }
+
+@media (max-width: 720px) {
+  .pnrow { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+  .pr-type { align-self: flex-start; }
+  .pr-state { flex-direction: row; align-items: center; gap: 8px; }
+}
