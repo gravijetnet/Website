@@ -7,13 +7,24 @@ import { sound } from './sound.js';
 import { esc, head } from './util.js';
 import { api } from './api.js';
 import { mountShell, surfaceFor, markActive, paintWho, pollLive, IS_DASH_HOST } from './shell.js';
-import {
-  renderHome, renderLeaderboards, renderPlayer, renderPlayers,
-  renderStaff, renderMedia, renderRules,
-} from './views.js';
-import { renderPlayerDash } from './dash-player.js';
-import { renderStaffDash } from './dash-staff.js';
 import { initPalette } from './palette.js';
+
+// The three surfaces are three separate JS graphs, and a visitor only ever needs
+// one: the public site never opens the console, the console never draws a
+// leaderboard. Loaded up front, they were one graph — main pulled dash-staff and
+// everything under it (dash-network, dash-panel, dash-live, the lot), so a
+// stranger landing on example.invalid downloaded the entire staff dashboard, some
+// 340 KB of JavaScript, before the home page could paint. Nobody but staff will
+// ever leave that home page for the console.
+//
+// So each surface's renderer is imported the moment it is first needed and not
+// before. The browser caches the module, so this is one request per surface per
+// load — and warm() below fires it during boot so even that request overlaps the
+// first paint rather than opening a fresh waterfall after main.js lands.
+//
+// Relative specifiers resolve against this module's own URL, which is served from
+// the content-hashed /assets-<ver>/ directory — so the split chunks stay
+// versioned exactly like the static graph did, with no change to the server.
 
 // Filing something is dashboard work, not site work.
 //
@@ -188,40 +199,46 @@ async function route(path, params) {
     // of the public home page, and every path under it is a console tab.
     if (surface === 'staff') {
       setTitle('Spielplatz');
+      const { renderStaffDash } = await import('./dash-staff.js');
       return await renderStaffDash(app, seg[0] || '', seg[1] || '');
     }
     if (seg[0] === 'dashboard') {
       setTitle('Your dashboard');
+      const { renderPlayerDash } = await import('./dash-player.js');
       return await renderPlayerDash(app, seg[1] || '', seg[2] || null);
     }
+
+    // Everything from here is the public site, and it all lives in one views
+    // module — loaded once, on the first public route this browser visits.
+    const views = await import('./views.js');
     if (seg.length === 0) {
       setTitle('');
-      return await renderHome(app);
+      return await views.renderHome(app);
     }
     if (seg[0] === 'leaderboards') {
       setTitle('Leaderboards');
-      return await renderLeaderboards(app, seg[1] || 'practice', params);
+      return await views.renderLeaderboards(app, seg[1] || 'practice', params);
     }
     if (seg[0] === 'player' && seg[1]) {
       const name = decodeURIComponent(seg[1]);
       setTitle(name);
-      return await renderPlayer(app, name);
+      return await views.renderPlayer(app, name);
     }
     if (seg[0] === 'players') {
       setTitle('Players');
-      return await renderPlayers(app);
+      return await views.renderPlayers(app);
     }
     if (seg[0] === 'staff') {
       setTitle('Staff');
-      return await renderStaff(app);
+      return await views.renderStaff(app);
     }
     if (seg[0] === 'media') {
       setTitle('Media');
-      return await renderMedia(app);
+      return await views.renderMedia(app);
     }
     if (seg[0] === 'rules') {
       setTitle('Rules');
-      return await renderRules(app);
+      return await views.renderRules(app);
     }
     setTitle('Not found');
     app.innerHTML = `<div class="container"><div class="notice"><h2>404 — no such route</h2><p>That page doesn't exist. <a href="/">Head back home</a>.</p></div></div>`;
@@ -234,6 +251,18 @@ async function route(path, params) {
 wireSound();
 wireSearch();
 initPalette();
+
+// Warm the one graph this first page will actually need, in parallel with the
+// rest of boot, so route()'s dynamic import below resolves from cache rather than
+// opening a second waterfall once main.js has finished. The browser dedupes this
+// against the awaited import, so it is fetched once, not twice.
+(function warm() {
+  const first = location.pathname.split('/').filter(Boolean)[0];
+  if (IS_DASH_HOST) import('./dash-staff.js');
+  else if (first === 'dashboard') import('./dash-player.js');
+  else import('./views.js');
+})();
+
 startRouter(route);
 // Only the site chrome carries a pill; pollLive returns immediately elsewhere.
 setInterval(pollLive, 30000);

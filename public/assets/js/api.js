@@ -46,6 +46,26 @@ function forgetMe() {
   meCache = null;
 }
 
+// The live count and the home overview both read /network the instant the home
+// page paints — the pill in the chrome and the mode cards in the body — and the
+// pill re-reads it on a 30s timer after that. Same trick as me(): cache the
+// in-flight promise so those two firing together share one request rather than
+// racing two cold rebuilds, and hold the answer for a few seconds so a chrome
+// remount doesn't refetch. Short on purpose — the pill's whole job is to be
+// current — and the server already caps the real work behind its own 15s cache.
+let netCache = null; // { at, promise }
+const NET_TTL = 10000;
+function network() {
+  const now = Date.now();
+  if (netCache && now - netCache.at < NET_TTL) return netCache.promise;
+  const promise = get('/network').catch((err) => {
+    if (netCache && netCache.promise === promise) netCache = null;
+    throw err;
+  });
+  netCache = { at: now, promise };
+  return promise;
+}
+
 async function send(path, method, body) {
   const res = await fetch(`/api${path}`, {
     method,
@@ -65,7 +85,7 @@ async function send(path, method, body) {
 }
 
 export const api = {
-  network: () => get('/network'),
+  network,
   me,
   forgetMe,
   logout: () => send('/auth/logout', 'POST'),
