@@ -142,3 +142,18 @@ vite.config.ts.timestamp-*
 # redone, but it is an input, not something the site serves — public/assets/sfx
 # holds the .wav that actually ships.
 minecraft_click.mp3
+
+**/node_modules/
+!.env.sample
+!.env.template
+!**/.env.example
+!**/.env.sample
+!**/.env.template
+.claude/
+.codex/
+*.jks
+*.keystore
+key.properties
+google-services.json
+firebase-service-account.json
+auth_cache/
